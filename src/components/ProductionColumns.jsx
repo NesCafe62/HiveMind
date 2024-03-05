@@ -1,10 +1,11 @@
+import { subscribe } from 'pozitron-js';
 import { For } from '../pozitron-web';
 import { DelegateDraggable } from '../libs/draggable';
 import { DragMode } from '../data';
 
 // const MOUSE_BUTTON_RIGHT = 2;
 
-function ProductionColumn({ column, getPrimaryColumn, removeItem, dragStartItem, dragMoveItem, dragFinishItem, setSelectedColumn }) {
+function ProductionColumn({ column, getPrimaryColumn, trackInvalidItems, removeItem, dragStartItem, dragMoveItem, dragFinishItem, setSelectedColumn }) {
 	let columnEl, itemsEl;
 
 	const primaryCol = column.isSecondary
@@ -136,6 +137,22 @@ function ProductionColumn({ column, getPrimaryColumn, removeItem, dragStartItem,
 		return ('0' + min).slice(-2) + ':' + ('0' + sec).slice(-2);
 	}
 
+	subscribe(trackInvalidItems, () => {
+		if (!itemsEl) {
+			return;
+		}
+		let i = 0;
+		for (const itemEl of itemsEl) {
+			const item = column.viewItems[i];
+			if (item.invalid) {
+				itemEl.classList.add('invalid');
+			} else {
+				itemEl.classList.remove('invalid');
+			}
+			i++;
+		}
+	});
+
 	function setupItems(els) {
 		itemsEl = els;
 		let i = 0;
@@ -194,6 +211,7 @@ function ProductionColumn({ column, getPrimaryColumn, removeItem, dragStartItem,
 							style={{ 'min-height': item.fixed ? '' : (item.height + 'px'), '--cl-bg': item.color }}
 						>
 							<div class="production-icon" style={{ 'background-image': `url('./resources/${item.icon}')` }} />
+							<i title="Недостаточно ресурсов" class="mdi mdi-alert-rhombus-outline" />
 						</div>
 					);
 				}
@@ -204,12 +222,13 @@ function ProductionColumn({ column, getPrimaryColumn, removeItem, dragStartItem,
 	// .production-button-prev
 }
 
-function ProductionColumns({ columns, getPrimaryColumn, removeItem, dragStartItem, dragMoveItem, dragFinishItem, setSelectedColumn }) {
+function ProductionColumns({ columns, getPrimaryColumn, trackInvalidItems, removeItem, dragStartItem, dragMoveItem, dragFinishItem, setSelectedColumn }) {
 	// const trackColumns = columns.track;
 	return (
 		<For each={columns} key="id">{ column => (
 			<ProductionColumn
 				column={column} getPrimaryColumn={getPrimaryColumn}
+				trackInvalidItems={trackInvalidItems}
 				removeItem={removeItem} dragStartItem={dragStartItem} dragMoveItem={dragMoveItem} dragFinishItem={dragFinishItem}
 				setSelectedColumn={setSelectedColumn}
 			/>

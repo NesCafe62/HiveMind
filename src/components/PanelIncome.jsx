@@ -5,21 +5,31 @@ function PanelIncome({ getEconomyItems, workersCount }) {
 	let economyItems;
 
 	function setupItems(itemsEl) {
-		let i = 0;
+		/* let i = 0;
 		for (const itemEl of itemsEl) {
 			const item = economyItems[i];
-			if (item.spendingHigher) {
+			if (item.spHigher) {
 				itemEl.classList.add('spending-item-higher');
 			} else {
 				itemEl.classList.remove('spending-item-higher');
 			}
-			if (item.spendingPrevHigher) {
-				itemEl.classList.add('spending-item-prev-higher');
+			if (item.spLower) {
+				itemEl.classList.add('spending-item-lower');
 			} else {
-				itemEl.classList.remove('spending-item-prev-higher');
+				itemEl.classList.remove('spending-item-lower');
+			}
+			if (item.spNextHigher) {
+				itemEl.classList.add('spending-item-next-higher');
+			} else {
+				itemEl.classList.remove('spending-item-next-higher');
+			}
+			if (item.spNextLower) {
+				itemEl.classList.add('spending-item-next-lower');
+			} else {
+				itemEl.classList.remove('spending-item-next-lower');
 			}
 			i++;
-		}
+		} */
 	}
 
 	const _economyItems = () => (
@@ -36,12 +46,22 @@ function PanelIncome({ getEconomyItems, workersCount }) {
 				if (item.isLast) {
 					return <div
 						class="spending-item-space-infinite"
+						classList={{
+							'spending-item-higher': item.spHigher,
+							'spending-item-lower': item.spLower,
+						}}
 						style={{ flex: '1', width: item.width + 'px' }}
 					/>;
 				} else {
 					return <div
 						class="spending-item-space"
-						classList={{ 'spending-item-next': item.isPrevSpent }}
+						classList={{
+							'spending-item-next': item.isPrevSpent,
+							'spending-item-higher': item.spHigher, 
+							'spending-item-lower': item.spLower,
+							'spending-item-next-higher': item.spNextHigher,
+							'spending-item-next-lower': item.spNextLower,
+						}}
 						style={{
 							'min-height': item.height + 'px',
 							width: item.width + 'px',

@@ -48,6 +48,7 @@ function ProductionColumnsData(validateRequirement, columnRemoved, getUnitData, 
 	const [trackColumns, notifyColumns] = voidSignal();
 
 	const [trackColumnsData, notifyColumnsData] = voidSignal();
+	const [trackInvalidItems, notifyInvalidItems] = voidSignal();
 
 	const [workersCount, setWorkersCount] = signal(0);
 
@@ -59,7 +60,6 @@ function ProductionColumnsData(validateRequirement, columnRemoved, getUnitData, 
 		const timeScale = getTimeScale();
 
 		const incomeWidthScale = 4;
-		let minedMinerals = 50;
 
 		const workerIncome = 60;
 
@@ -72,7 +72,7 @@ function ProductionColumnsData(validateRequirement, columnRemoved, getUnitData, 
 			color: undefined, id: undefined,
 			isSpent: false, reminder: INITIAL_MINERALS * INCOME_SCALE_DIV,
 			isPrevSpent: false,
-			// spendingHigher: true, spendingPrevHigher: false,
+			spHigher: false, spNextHigher: false, spLower: true, spNextLower: false,
 			// key: '', itemsId: ['I'],
 		}];
 
@@ -101,6 +101,7 @@ function ProductionColumnsData(validateRequirement, columnRemoved, getUnitData, 
 					color: undefined, id: undefined,
 					isSpent: false, reminder: 0,
 					isPrevSpent: false,
+					spHigher: false, spNextHigher: false, spLower: true, spNextLower: false,
 					// spendingHigher: false, spendingPrevHigher: false,
 					// key: '', itemsId: [itemId],
 				});
@@ -113,7 +114,6 @@ function ProductionColumnsData(validateRequirement, columnRemoved, getUnitData, 
 
 			for (let i = incomeItems.length - 1; i >= 0; i--) {
 				const incomeItem = incomeItems[i];
-				// console.log(incomeItem.reminder, incomeItem.time, insertTimeEnd);
 				if (incomeItem.time > insertTimeEnd) {
 					continue;
 				}
@@ -146,7 +146,7 @@ function ProductionColumnsData(validateRequirement, columnRemoved, getUnitData, 
 				const incomePerMin = incomeItem.incomePerMin;
 				const available = incomePerMin * (insertTimeEnd - incomeItem.time);
 
-				if (available === 0) {
+				/* if (available === 0) {
 					console.log('zero height!');
 					console.log({
 						insertTimeEnd,
@@ -154,7 +154,7 @@ function ProductionColumnsData(validateRequirement, columnRemoved, getUnitData, 
 						incomeItem: {...incomeItem},
 						incomeItemTime: incomeItem.time,
 					});
-				}
+				} */
 
 				let insertTime, unspentReminder = 0;
 				if (remaining >= available) {
@@ -176,6 +176,7 @@ function ProductionColumnsData(validateRequirement, columnRemoved, getUnitData, 
 						color: undefined, id: undefined,
 						isSpent: false, reminder: 0,
 						isPrevSpent: false,
+						spHigher: false, spNextHigher: false, spLower: true, spNextLower: false,
 					});
 					// need to increment 'i' after
 				}
@@ -187,6 +188,7 @@ function ProductionColumnsData(validateRequirement, columnRemoved, getUnitData, 
 					color, id: itemId,
 					isSpent: true, reminder: unspentReminder,
 					isPrevSpent: false,
+					spHigher: false, spNextHigher: false, spLower: true, spNextLower: false,
 				});
 
 				const isLast = (i === incomeItems.length - 1);
@@ -198,6 +200,7 @@ function ProductionColumnsData(validateRequirement, columnRemoved, getUnitData, 
 						color: undefined, id: undefined,
 						isSpent: false, reminder: 0,
 						isPrevSpent: false,
+						spHigher: false, spNextHigher: false, spLower: true, spNextLower: false,
 					});
 				}
 
@@ -212,9 +215,7 @@ function ProductionColumnsData(validateRequirement, columnRemoved, getUnitData, 
 					break;
 				}
 			}
-			if (remaining > 0) {
-				console.log(`Not enough minerals! ${-remaining}`);
-			}
+			return remaining;
 		}
 
 		for (const column of columns) {
@@ -222,7 +223,7 @@ function ProductionColumnsData(validateRequirement, columnRemoved, getUnitData, 
 				const unitData = getUnitData(item.typeId);
 				if (unitData.mineralIncome > 0) {
 					if (unitData.lifeTime > 0) { // temporary income (MULE)
-						insertIncomeDelta(item.time, unitData.mineralIncome, item.id);
+						insertIncomeDelta(item.time, unitData.mineralIncome, item.id,);
 						insertIncomeDelta(item.endTime, -unitData.mineralIncome, -item.id);
 					} else { // permanent income (workers, SCV-s ...)
 						insertIncomeDelta(item.endTime, unitData.mineralIncome, item.id);
@@ -276,7 +277,13 @@ function ProductionColumnsData(validateRequirement, columnRemoved, getUnitData, 
 					workers++;
 				}
 				if (unitData.mineralCost > 0) {
-					insertSpending(item.time, unitData.mineralCost, item.id, Color[unitData.category]);
+					const remaining = insertSpending(item.time, unitData.mineralCost, item.id, Color[unitData.category]);
+					if (remaining > 0) {
+						item.invalid = true;
+						// console.log(`Not enough minerals! ${-divideInt(remaining, INCOME_SCALE_DIV)}`);
+					} else {
+						item.invalid = false;
+					}
 					// console.log('insertSpending', item.time, unitData.mineralCost, item.id, Color[unitData.category]);
 				}
 			}
@@ -290,17 +297,30 @@ function ProductionColumnsData(validateRequirement, columnRemoved, getUnitData, 
 				income.isSpent &&
 				income.id !== lastItem.id
 			);
+			income.spHigher = (income.width > lastItem.width); // || isFirst
+			income.spLower = (
+				income.width < lastItem.width &&
+				income.id === lastItem.id
+			);
+			lastItem.spNextLower = (
+				income.width < lastItem.width
+			);
+			lastItem.spNextHigher = (
+				income.width > lastItem.width &&
+				income.id === lastItem.id
+			);
 			lastItem = income;
 		}
 		lastItem.isLast = true;
 		// incomeItems[incomeItems.length - 1].isLast = true;
 
-		incomeItems[0].spendingHigher = true;
-		incomeItems[0].spendingPrevHigher = false;
+		incomeItems[0].spHigher = true;
+		// incomeItems[0].spPrevHigher = false;
 
 		// console.log(incomeItems);
 
 		setWorkersCount(workers);
+		notifyInvalidItems();
 
 		return incomeItems;
 	}
@@ -315,6 +335,7 @@ function ProductionColumnsData(validateRequirement, columnRemoved, getUnitData, 
 			item.endTime = endTime;
 			item.dragging = false;
 			item.visible = true;
+			item.invalid = false;
 			item.fixed = item.fixed || false;
 			nextItemId++;
 			return item;
@@ -370,6 +391,7 @@ function ProductionColumnsData(validateRequirement, columnRemoved, getUnitData, 
 					height: unitData.buildTime * timeScale,
 					isWide: unitData.isWide || false,
 					fixed: item.fixed,
+					invalid: item.invalid,
 					dragging: item.dragging,
 					roundedTop: !item.fixed && (!nextItem || (nextItem.time > lastTime)),
 					roundedBottom: false,
@@ -481,12 +503,14 @@ function ProductionColumnsData(validateRequirement, columnRemoved, getUnitData, 
 		const item = {
 			id: nextItemId,
 			typeId, productionTypeId,
-			visible, fixed: false,
+			visible, fixed: false, invalid: false,
 			name: unitData.name,
 			time, endTime: time + unitData.buildTime,
 			dragging: false,
 		};
 		nextItemId++;
+		
+		notifyColumnsData();
 		column.items.push(item);
 		column.notify();
 		if (column.items.length === 1 && isLastColumn(column)) {
@@ -512,8 +536,6 @@ function ProductionColumnsData(validateRequirement, columnRemoved, getUnitData, 
 				insertColumnAfter(column.secondaryCol, column);
 			}
 		}
-
-		notifyColumnsData();
 	}
 
 	function deleteElement(items, fn) {
@@ -883,6 +905,8 @@ function ProductionColumnsData(validateRequirement, columnRemoved, getUnitData, 
 	// };
 
 	return {
+		trackInvalidItems,
+
 		workersCount,
 		columnsData,
 		getEconomyItems,
@@ -1072,7 +1096,7 @@ function App() {
 		[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],
 	]; */
 
-	const { workersCount, columnsData, getEconomyItems, getPrimaryColumn, appendItem, removeItem, dragStartItem, dragMoveItem, dragFinishItem } = ProductionColumnsData(
+	const { workersCount, columnsData, getEconomyItems, getPrimaryColumn, trackInvalidItems, appendItem, removeItem, dragStartItem, dragMoveItem, dragFinishItem } = ProductionColumnsData(
 		validateRequirement,
 		columnRemoved,
 		getUnitData,
@@ -1184,6 +1208,7 @@ function App() {
 	render(ProductionColumns, document.getElementById('production-columns'), {
 		columns: columnsData,
 		getPrimaryColumn,
+		trackInvalidItems,
 		removeItem: handleRemoveItem,
 		dragStartItem,
 		dragMoveItem,
