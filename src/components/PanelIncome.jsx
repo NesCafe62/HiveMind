@@ -2,10 +2,10 @@ import { Index } from '../pozitron-web';
 
 function PanelIncome({ getEconomyItems, workersCount }) {
 
-	let economyItems;
+	// let economyItems;
 
-	function setupItems(itemsEl) {
-		/* let i = 0;
+	/* function setupItems(itemsEl) {
+		let i = 0;
 		for (const itemEl of itemsEl) {
 			const item = economyItems[i];
 			if (item.spHigher) {
@@ -29,20 +29,20 @@ function PanelIncome({ getEconomyItems, workersCount }) {
 				itemEl.classList.remove('spending-item-next-lower');
 			}
 			i++;
-		} */
-	}
+		}
+	} */
 
-	const _economyItems = () => (
+	/* const _economyItems = () => (
 		economyItems = getEconomyItems() 
-	);
+	); */
 
 	return (
-		<div id="panel-income">
+		<>
 			<div id="workers-count">
 				<div class="workers-count-icon" style="background-image: url('./resources/unit-terran-scv.png')" />
 				<span class="workers-count-label">{workersCount}</span>
 			</div>
-			<Index each={_economyItems} ref={(els) => setupItems(els)}>{ item => { //  key="key"
+			<Index each={getEconomyItems}>{ item => { //  key="key"   ref={(els) => setupItems(els)}
 				if (item.isLast) {
 					return <div
 						class="spending-item-space-infinite"
@@ -75,7 +75,7 @@ function PanelIncome({ getEconomyItems, workersCount }) {
 					</button>
 				); */
 			}}</Index>
-		</div>
+		</>
 	);
 }
 

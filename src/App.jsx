@@ -27,12 +27,13 @@ import PanelIncome from "./components/PanelIncome";
 // [+] починить скроллинг при перетаскивании (починено. вроде)
 // [] перетаскивание лайна
 // [] перетаскивание элементов между лайнами
-// [] залочить перетаскивание элементов при нехватке ресурсов
-// [] линия добычи до 16ти рабочих с одной базы
+// [-] залочить перетаскивание элементов при нехватке ресурсов
+// [+] линия добычи до 16ти рабочих с одной базы
 // [+] создавать юнита с учетом прокрутки (внизу вьюпорта)
 // [+] расширить ширину зоны инкама
 // [+] добавлять больше лайнов автоматически (всего один последний лайн. временно)
 // [] добавлять деления таймлайна динамически
+// [] прокручивать viewport автоматически при перетаскивании эелментов таймлайна вверх или вниз
 
 const noopFn = () => {};
 const trueFn = () => true;
@@ -509,7 +510,7 @@ function ProductionColumnsData(validateRequirement, columnRemoved, getUnitData, 
 			dragging: false,
 		};
 		nextItemId++;
-		
+
 		notifyColumnsData();
 		column.items.push(item);
 		column.notify();
@@ -644,8 +645,8 @@ function ProductionColumnsData(validateRequirement, columnRemoved, getUnitData, 
 				setItemsDragging(column.secondaryCol);
 				column.secondaryCol.notify();
 			}
-			column.notify();
 			notifyColumnsData();
+			column.notify();
 		} else if (
 			unitData.category === Category.ADDON && (
 				column.isSecondary || !event.shiftKey
@@ -663,9 +664,9 @@ function ProductionColumnsData(validateRequirement, columnRemoved, getUnitData, 
 			dragItem.dragging = true;
 			setItemsDragging(primaryCol.secondaryCol);
 
+			notifyColumnsData();
 			primaryCol.notify();
 			primaryCol.secondaryCol.notify();
-			notifyColumnsData();
 		} else if (event.shiftKey) {
 			// drag all items except production
 			dragMode = DragMode.Multiple;
@@ -696,12 +697,12 @@ function ProductionColumnsData(validateRequirement, columnRemoved, getUnitData, 
 			}
 			dragMinTime += heightOffset;
 
+			notifyColumnsData();
 			if (dragMode === DragMode.MultipleWithSecondary) {
 				setItemsDragging(column.secondaryCol);
 				column.secondaryCol.notify();
 			}
 			column.notify();
-			notifyColumnsData();
 		} else {
 			dragMode = DragMode.Single;
 			dragMinTime = 0;
@@ -724,6 +725,7 @@ function ProductionColumnsData(validateRequirement, columnRemoved, getUnitData, 
 		newY = Math.max(newY, dragMinTime);
 		const prevTime = dragItem.time;
 
+		notifyColumnsData();
 		if (dragMode === DragMode.Multiple || dragMode === DragMode.MultipleWithSecondary) {
 			let offset = newY - prevTime;
 			for (const item of column.items) {
@@ -798,7 +800,6 @@ function ProductionColumnsData(validateRequirement, columnRemoved, getUnitData, 
 			}
 			column.secondaryCol.notify();
 		}
-		notifyColumnsData();
 
 		if (dragMode === DragMode.Single || dragMode === DragMode.SingleWithSecondary) {
 			return [newX, newY * timeScale];
@@ -806,6 +807,7 @@ function ProductionColumnsData(validateRequirement, columnRemoved, getUnitData, 
 	}
 
 	function dragFinishItem(column, viewItem) {
+		notifyColumnsData();
 		if (dragMode === DragMode.Multiple) {
 			clearItemsDragging(column);
 			column.notify();
@@ -830,7 +832,6 @@ function ProductionColumnsData(validateRequirement, columnRemoved, getUnitData, 
 				column.secondaryCol.notify();
 			} */
 		}
-		notifyColumnsData();
 
 		/* const index = column.items.findIndex(i => i.id === viewItem.id);
 		if (index === -1) {
@@ -1190,9 +1191,9 @@ function App() {
 	function handleAppendItem(typeId) {
 		batch(() => {
 			if (selectedColumn) {
-				const minTime = divideInt((
-					panelProductionEl.scrollHeight - panelProductionEl.scrollTop - panelProductionEl.offsetHeight
-				), timeScale());
+				const minTime = Math.ceil((
+					panelProductionEl.scrollHeight - panelProductionEl.scrollTop - panelProductionEl.clientHeight
+				) / timeScale());
 				appendItem(selectedColumn, typeId, {minTime});
 				// columnUpdated(selectedColumn.id);
 				updateButtons();
@@ -1206,6 +1207,7 @@ function App() {
 	delegateEvent(panelProductionEl, '.production-item', 'contextmenu', (el, event) => el.clickRemoveItem(event));
 
 	render(ProductionColumns, document.getElementById('production-columns'), {
+		panelProductionEl,
 		columns: columnsData,
 		getPrimaryColumn,
 		trackInvalidItems,
@@ -1215,7 +1217,7 @@ function App() {
 		dragFinishItem,
 		setSelectedColumn,
 	});
-	render(PanelIncome, document.getElementById('panel-income'), {
+	render(PanelIncome, document.getElementById('panel-income-mount'), {
 		getEconomyItems,
 		workersCount,
 	});

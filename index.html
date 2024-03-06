@@ -4,36 +4,23 @@
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		<link rel="stylesheet" href="/src/styles/styles.scss"/>
-		<!-- link rel="stylesheet" href="~/@mdi/font/scss/materialdesignicons.scss"/ -->
 		<title>HiveMind</title>
 	</head>
 	<body>
 		<main>
 			<div class="panel-production" id="panel-production">
 				<div class="production-scroll-content">
-					<div id="panel-income"></div>
-					<!-- div class="panel-income">
-						<div class="spending-item spending-item-higher bg-pink" style="min-height: 20px; width: 40px;" ></div>
-						<div class="spending-item-space" style="min-height: 20px; width: 40px;"></div>
-
-						<div class="spending-item spending-item-prev-higher bg-pink" style="min-height: 20px; width: 40px;" ></div>
-						<div class="spending-item spending-item-higher bg-pink" style="min-height: 10px; width: 45px;" ></div>
-						<div class="spending-item spending-item-next bg-pink" style="min-height: 15px; width: 45px;" ></div>
-						<div class="spending-item-space spending-item-prev-higher" style="min-height: 30px; width: 45px;"></div>
-						<div class="spending-item-space spending-item-higher" style="min-height: 20px; width: 50px;"></div>
-						
-						<div class="spending-item bg-green" style="min-height: 20px; width: 50px;" ></div>
-						<div class="spending-item-space-infinite" style="flex: 1; width: 50px;"></div>
-					</div -->
+					<div id="panel-income">
+						<div class="speding-income-limit" title="Максимальная добыча с первой базы" style="right: 63px"><!-- 16 * 4 = 64 -->
+							<svg><line class="income-limit" x1="0" y1="100%" x2="0" y2="0"></line></svg>
+						</div>
+						<div id="panel-income-mount"></div>
+					</div>
 					<div class="panel-timeline">
 						<svg class="timeline-bars">
-							<defs>
-								<line id="arrow-head"></line>
-							</defs>
 							<line class="bars-small" x1="0" y1="100%" x2="0" y2="0"/>
 							<line class="bars-medium" x1="0" y1="100%" x2="0" y2="0"/>
 							<line class="bars" x1="0" y1="100%" x2="0" y2="0"/>
-							<use y="100%" xlink:href="#arrow-head"/>
 						</svg>
 						<div class="timeline-labels">
 							<div>10</div>
@@ -65,10 +52,10 @@
 						</div>
 					</div>
 					<div id="production-columns"></div>
-					<div id="panel-items-palette"></div>
 				</div>
 				<div class="production-panel-fixed-bg"></div>
 			</div>
+			<div id="panel-items-palette"></div>
 		</main>
 		<script src="/src/index.js" type="module"></script>
 	</body>
