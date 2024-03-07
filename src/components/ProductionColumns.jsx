@@ -1,6 +1,6 @@
 import { subscribe, batch } from 'pozitron-js';
 import { For } from '../pozitron-web';
-import { DelegateDraggable } from '../libs/draggable';
+import { DelegateDraggable, handleDragScroll } from '../libs/draggable';
 import { DragMode } from '../data';
 
 // const MOUSE_BUTTON_RIGHT = 2;
@@ -58,11 +58,11 @@ function ProductionColumn({ panelProductionEl, column, getPrimaryColumn, trackIn
 	let scrollingTimer = null;
 
 	function updateScroll() {
-		if (scroll < 0) {
-			panelProductionEl.scrollBy({left: 0, top: -100, behavior: 'smooth'});
-		} else if (scroll > 0) {
-			panelProductionEl.scrollBy({left: 0, top: 100, behavior: 'smooth'});
+		if (scroll !== 0) {
+			panelProductionEl.scrollBy({left: 0, top: scroll, behavior: 'instant'});
 		}
+		scroll = 0;
+		scrollingTimer = null;
 	}
 
 	function setup(el) {
@@ -87,16 +87,17 @@ function ProductionColumn({ panelProductionEl, column, getPrimaryColumn, trackIn
 				}
 				const maxY = columnEl.offsetHeight;
 				const yFromBottom = maxY - dragElHeight - y;
-				if (y < panelProductionEl.scrollTop) {
-					scroll = -1;
-					// panelProductionEl.scrollBy({left: 0, top: -10, behavior: 'smooth'});
-					// panelProductionEl.scrollHeight - panelProductionEl.scrollTop - panelProductionEl.clientHeight
-				} else if (yFromBottom < panelProductionEl.scrollHeight - panelProductionEl.scrollTop - panelProductionEl.clientHeight) {
-					scroll = 1;
-					// panelProductionEl.scrollBy({left: 0, top: 10, behavior: 'smooth'});
+				if (y < panelProductionEl.scrollTop + 30) {
+					scroll = Math.max(-20, y - (panelProductionEl.scrollTop + 30));
+				} else if (yFromBottom < 30 + panelProductionEl.scrollHeight - panelProductionEl.scrollTop - panelProductionEl.clientHeight) {
+					scroll = Math.min(20, (30 + panelProductionEl.scrollHeight - panelProductionEl.scrollTop - panelProductionEl.clientHeight) - yFromBottom);
 				} else {
 					scroll = 0;
 				}
+				if (scroll !== 0 && !scrollingTimer) {
+					scrollingTimer = requestAnimationFrame(updateScroll);
+				}
+
 				if (dragMode === DragMode.Single) {
 					batch(() => {
 						let [newX, newY] = el.handleDragMoveItem(column, dragItem, x, yFromBottom);
@@ -144,7 +145,6 @@ function ProductionColumn({ panelProductionEl, column, getPrimaryColumn, trackIn
 						columnEl2.updateDragStart();
 					}
 				}
-				scrollingTimer = setInterval(updateScroll, 20);
 			},
 			finished: (el) => {
 				if (dragMode === DragMode.Column) {
@@ -169,7 +169,9 @@ function ProductionColumn({ panelProductionEl, column, getPrimaryColumn, trackIn
 					}
 				});
 				scroll = 0;
-				clearInterval(scrollingTimer);
+				if (scrollingTimer) {
+					cancelAnimationFrame(scrollingTimer);
+				}
 				scrollingTimer = null;
 			},
 		});
@@ -269,9 +271,17 @@ function ProductionColumn({ panelProductionEl, column, getPrimaryColumn, trackIn
 function ProductionColumns({ panelProductionEl, columns, getPrimaryColumn, trackInvalidItems, removeItem, dragStartItem, dragMoveItem, dragFinishItem, setSelectedColumn }) {
 	// const trackColumns = columns.track;
 
+	let lastScrollTop;
+
 	function setup() {
 		panelProductionEl.scrollTop = panelProductionEl.scrollHeight; // set scrolling at the bottom on initial load
+		lastScrollTop = panelProductionEl.scrollTop;
 	}
+
+	panelProductionEl.addEventListener('scroll', function() {
+		handleDragScroll(0, lastScrollTop - panelProductionEl.scrollTop);
+		lastScrollTop = panelProductionEl.scrollTop;
+	});
 
 	return (
 		<For each={columns} key="id" ref={() => setup()}>{ column => (

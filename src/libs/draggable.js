@@ -31,6 +31,23 @@ document.addEventListener('mousemove', function(event) {
 	// current.el.style.top = (event.clientY - current.startY) + 'px';
 });
 
+export function handleDragScroll(deltaX, deltaY) {
+	if (!current) {
+		return;
+	}
+	current.startX += deltaX;
+	current.startY += deltaY;
+	current.x -= deltaX;
+	current.y -= deltaY;
+	if (current.move) {
+		current.move(current);
+	} else {
+		current.el.style.left = current.x + 'px';
+		current.el.style.top = current.y + 'px';
+	}
+};
+
+
 export const MOUSE_BUTTON_LEFT = 0;
 export const MOUSE_BUTTON_RIGHT = 2;
 
