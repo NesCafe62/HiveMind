@@ -377,6 +377,9 @@ export function For(props) {
 							const prevIndex = itemsMap.get(itemKey);
 							newEl = prevDiffElements[prevIndex];
 							prevDiffElements[prevIndex] = undefined;
+							if (!newEl) {
+								throw new Error('For duplicate key detected: ' + JSON.stringify(itemKey));
+							}
 						} else {
 							newEl = renderFn(items[i]);
 							// console.log('render', item);

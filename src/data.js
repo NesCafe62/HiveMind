@@ -250,7 +250,7 @@ export const UnitsData = {
 		},
 		{
 			name: 'Lift', icon: 'ability-terran-liftoff.png', isWide: true,
-			category: Category.ADDON, requirement: Category.ADDON, visible: Category.PRODUCTION,
+			category: Category.ADDON, requirement: [AND, Category.ADDON, COL_PRIMARY], visible: Category.PRODUCTION,
 			buildTime: 5,
 		},
 

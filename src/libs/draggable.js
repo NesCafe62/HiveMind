@@ -27,8 +27,6 @@ document.addEventListener('mousemove', function(event) {
 		return;
 	}
 	updatePosition(current, event);
-	// current.el.style.left = (event.clientX - current.startX) + 'px';
-	// current.el.style.top = (event.clientY - current.startY) + 'px';
 });
 
 export function handleDragScroll(deltaX, deltaY) {

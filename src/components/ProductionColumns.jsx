@@ -5,12 +5,12 @@ import { DragMode } from '../data';
 
 // const MOUSE_BUTTON_RIGHT = 2;
 
-function ProductionColumn({ panelProductionEl, column, getPrimaryColumn, trackInvalidItems, removeItem, dragStartItem, dragMoveItem, dragFinishItem, setSelectedColumn }) {
+function ProductionColumn({ panelProductionEl, column, trackInvalidItems, removeItem, dragStartItem, dragMoveItem, dragFinishItem, setSelectedColumn }) {
 	let columnEl, itemsEl;
 
-	const primaryCol = column.isSecondary
+	/* const primaryCol = column.isSecondary
 		? getPrimaryColumn(column)
-		: column;
+		: column; */
 
 	function clickAppendItem() {
 		setSelectedColumn(column, columnEl);
@@ -72,15 +72,9 @@ function ProductionColumn({ panelProductionEl, column, getPrimaryColumn, trackIn
 		columnEl.updateDragStart = updateDragStart;
 		columnEl.updateDragFinish = updateDragFinish;
 
-		let dragElHeight, dragMode, dragItem, columnEl2;
-
-		/* columnEl.addEventListener('scroll', function(event) {
-			console.log('scroll');
-		}); */
+		let dragElHeight, dragMode, dragItem, columnSecondaryEl;
 
 		DelegateDraggable(columnEl, '.production-item', {
-			// placeholder: true,
-			scroll: true,
 			move: ({el, x, y}) => {
 				if (dragMode === DragMode.Column) {
 					return;
@@ -107,17 +101,17 @@ function ProductionColumn({ panelProductionEl, column, getPrimaryColumn, trackIn
 					});
 				} else if (dragMode === DragMode.SingleWithSecondary) {
 					batch(() => {
-						el.handleDragMoveItem(primaryCol, dragItem, x, yFromBottom);
+						el.handleDragMoveItem(column, dragItem, x, yFromBottom);
 					});
 					updateDrag(maxY);
-					columnEl2.updateDrag(maxY);
+					columnSecondaryEl.updateDrag(maxY);
 				} else if (dragMode === DragMode.Multiple || dragMode === DragMode.MultipleWithSecondary) {
 					batch(() => {
 						el.handleDragMoveItem(column, dragItem, x, yFromBottom);
 					});
 					updateDrag(maxY);
 					if (dragMode === DragMode.MultipleWithSecondary) {
-						columnEl2.updateDrag(maxY);
+						columnSecondaryEl.updateDrag(maxY);
 					}
 				}
 			},
@@ -128,21 +122,21 @@ function ProductionColumn({ panelProductionEl, column, getPrimaryColumn, trackIn
 				if (dragMode === DragMode.Column) {
 					return;
 				}
-				// maxY = columnEl.offsetHeight;
 				dragElHeight = el.offsetHeight;
 				if (dragMode === DragMode.Single) {
 					el.classList.add('dragging');
 				} else if (dragMode === DragMode.SingleWithSecondary) {
 					updateDragStart();
-					columnEl2 = column.isSecondary
+					/* columnEl2 = column.isSecondary
 						? columnEl.previousElementSibling
-						: columnEl.nextElementSibling;
-					columnEl2.updateDragStart();
+						: columnEl.nextElementSibling; */
+					columnSecondaryEl = columnEl.nextElementSibling;
+					columnSecondaryEl.updateDragStart();
 				} else if (dragMode === DragMode.Multiple || dragMode === DragMode.MultipleWithSecondary) {
 					updateDragStart();
 					if (dragMode === DragMode.MultipleWithSecondary) {
-						columnEl2 = columnEl.nextElementSibling;
-						columnEl2.updateDragStart();
+						columnSecondaryEl = columnEl.nextElementSibling;
+						columnSecondaryEl.updateDragStart();
 					}
 				}
 			},
@@ -158,12 +152,12 @@ function ProductionColumn({ panelProductionEl, column, getPrimaryColumn, trackIn
 						el.handleDragFinishItem(column, dragItem);
 					} else if (dragMode === DragMode.SingleWithSecondary) {
 						updateDragFinish();
-						columnEl2.updateDragFinish();
-						el.handleDragFinishItem(primaryCol, dragItem);
+						columnSecondaryEl.updateDragFinish();
+						el.handleDragFinishItem(column, dragItem);
 					} else if (dragMode === DragMode.Multiple || dragMode === DragMode.MultipleWithSecondary) {
 						updateDragFinish();
 						if (dragMode === DragMode.MultipleWithSecondary) {
-							columnEl2.updateDragFinish();
+							columnSecondaryEl.updateDragFinish();
 						}
 						el.handleDragFinishItem(column, dragItem);
 					}
@@ -205,7 +199,7 @@ function ProductionColumn({ panelProductionEl, column, getPrimaryColumn, trackIn
 		for (const itemEl of itemsEl) {
 			const item = column.viewItems[i];
 			if (!item.spacing) {
-				const titleText = displayTime(item.time) + '  –  ' + item.name;
+				const titleText = displayTime(item.time) + '  &ndash;  ' + item.name;
 				itemEl.setAttribute('title', titleText);
 				if (item.roundedTop) {
 					itemEl.classList.add('border-top-round');
@@ -243,8 +237,6 @@ function ProductionColumn({ panelProductionEl, column, getPrimaryColumn, trackIn
 					function handleDragFinishItem(col, item) {
 						return dragFinishItem(col, item);
 					}
-					// .border-bottom-round
-					// .border-top-round
 					return (
 						<div
 							class="production-item" classList={{ 'production-item-wide': item.isWide, 'production-item-fixed': item.fixed }}
@@ -265,12 +257,9 @@ function ProductionColumn({ panelProductionEl, column, getPrimaryColumn, trackIn
 			<button class="production-button-add-item" ref={el => el.clickAppendItem = clickAppendItem}><i class="mdi mdi-plus" /></button>
 		</div>
 	);
-	// .production-button-prev
 }
 
-function ProductionColumns({ panelProductionEl, columns, getPrimaryColumn, trackInvalidItems, removeItem, dragStartItem, dragMoveItem, dragFinishItem, setSelectedColumn }) {
-	// const trackColumns = columns.track;
-
+function ProductionColumns({ panelProductionEl, columns, trackInvalidItems, removeItem, dragStartItem, dragMoveItem, dragFinishItem, setSelectedColumn }) {
 	let lastScrollTop;
 
 	function setup() {
@@ -287,7 +276,7 @@ function ProductionColumns({ panelProductionEl, columns, getPrimaryColumn, track
 		<For each={columns} key="id" ref={() => setup()}>{ column => (
 			<ProductionColumn
 				panelProductionEl={panelProductionEl}
-				column={column} getPrimaryColumn={getPrimaryColumn}
+				column={column}
 				trackInvalidItems={trackInvalidItems}
 				removeItem={removeItem} dragStartItem={dragStartItem} dragMoveItem={dragMoveItem} dragFinishItem={dragFinishItem}
 				setSelectedColumn={setSelectedColumn}
