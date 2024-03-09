@@ -13,11 +13,11 @@ function PanelIncome({ getEconomyItems, workersCount }) {
 			}
 			itemEl.style['min-height'] = item.height + 'px';
 			itemEl.style.width = item.width + 'px';
-			if (item.invalid) {
+			/* if (item.invalid) {
 				itemEl.classList.add('spending-item-invalid');
 			} else {
 				itemEl.classList.remove('spending-item-invalid');
-			}
+			} */
 			if (item.isPrevSpent) {
 				itemEl.classList.add('spending-item-next');
 			} else {
@@ -45,6 +45,22 @@ function PanelIncome({ getEconomyItems, workersCount }) {
 			}
 			i++;
 		}
+
+		// deferring invalid class update to mantain smooth opacity transition
+		setTimeout(() => {
+			let i = 0;
+			for (const itemEl of itemsEl) {
+				const item = economyItems[i];
+				if (item.id) {
+					if (item.invalid) {
+						itemEl.classList.add('spending-item-invalid');
+					} else {
+						itemEl.classList.remove('spending-item-invalid');
+					}
+				}
+				i++;
+			}
+		}, 0);
 	}
 
 	const _economyItems = () => (
@@ -57,7 +73,7 @@ function PanelIncome({ getEconomyItems, workersCount }) {
 				<div class="workers-count-icon" style="background-image: url('./resources/unit-terran-scv.png')" />
 				<span class="workers-count-label">{workersCount}</span>
 			</div>
-			<For each={_economyItems} key="key" ref={(els) => setupItems(els)}>{ item => { // ref={(els) => setupItems(els)} 
+			<For each={_economyItems} key="key" ref={(els) => setupItems(els)}>{ item => {
 				if (item.isLast) {
 					return <div
 						class="spending-item-space-infinite"
@@ -70,7 +86,7 @@ function PanelIncome({ getEconomyItems, workersCount }) {
 				} else {
 					return <div
 						class="spending-item-space"
-						data-key={item.key}
+						// data-key={item.key}
 						classList={{
 							'spending-item-invalid': item.invalid,
 							'spending-item-next': item.isPrevSpent,
