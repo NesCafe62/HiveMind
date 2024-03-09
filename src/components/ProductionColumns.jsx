@@ -5,6 +5,8 @@ import { DragMode } from '../data';
 
 // const MOUSE_BUTTON_RIGHT = 2;
 
+const SYMBOL_NDASH = decodeURIComponent('%E2%80%93'); // &ndash;
+
 function ProductionColumn({ panelProductionEl, column, trackInvalidItems, removeItem, dragStartItem, dragMoveItem, dragFinishItem, setSelectedColumn }) {
 	let columnEl, itemsEl;
 
@@ -199,7 +201,8 @@ function ProductionColumn({ panelProductionEl, column, trackInvalidItems, remove
 		for (const itemEl of itemsEl) {
 			const item = column.viewItems[i];
 			if (!item.spacing) {
-				const titleText = displayTime(item.time) + '  &ndash;  ' + item.name;
+				const timeText = displayTime(item.time);
+				const titleText = `${timeText}  ${SYMBOL_NDASH}  ${item.name}`;
 				itemEl.setAttribute('title', titleText);
 				if (item.roundedTop) {
 					itemEl.classList.add('border-top-round');
