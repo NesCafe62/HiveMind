@@ -227,9 +227,11 @@ function ProductionColumn({ panelProductionEl, column, trackInvalidItems, remove
 				} else if (item.spacing) {
 					return <div class="production-item-space" style={{ 'min-height': item.height + 'px' }} />;
 				} else {
-					function clickRemoveItem(event) {
-						event.preventDefault();
-						removeItem(column, item);
+					function clickRemoveItem(event, mouseDown) {
+						// event.preventDefault();
+						if (!item.fixed) {
+							removeItem(column, item, mouseDown);
+						}
 					}
 					function handleDragStartItem(event) {
 						return dragStartItem(column, item, event);

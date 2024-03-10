@@ -3,9 +3,29 @@ import { render } from "pozitron-js/render";
 import { UnitsData, ButtonCategories, Color, AND, OR, NO, EMPTY, COL_PRIMARY, COL_SECONDARY, Category, DragMode, BuildType } from "./data";
 import { delegateEvent, divideInt } from "./libs/utils";
 import { notifiableStore } from "./pozitron-store";
+import PanelMenu from "./components/PanelMenu";
 import ProductionColumns from "./components/ProductionColumns";
 import PanelItemsPalette from "./components/PanelItemsPalette";
 import PanelIncome from "./components/PanelIncome";
+
+/* function pushImmutable(arr, item) {
+	const newArr = arr.slice(0);
+	newArr.push(item);
+	return newArr;
+}
+
+function deleteImmutable(arr, index) {
+	// range check is skipped. error if (index >= arr.length || index < 0)
+	if (arr.length === 1) {
+		return [];
+	}
+	const newArr = arr.slice(0, arr.length - 1); // without last element
+	if (index < arr.length - 1) {
+		newArr.copyWithin(index, index + 1);
+		newArr[arr.length - 2] = arr[arr.length - 1]; // copy last element
+	}
+	return newArr;
+} */
 
 /* function notifiable(data) {
 	const [track, notify] = voidSignal();
@@ -22,6 +42,12 @@ import PanelIncome from "./components/PanelIncome";
 } */
 
 // todo:
+// [] учет газа
+// [] учет лимита
+// [] учет global requirements
+// [] сохранение в localStorage и загрузка
+// [] история, отмена операций по Ctrl+Z и повторное применение
+
 // [+] кол-во рабочих на таймлайне (готово. временно)
 // [] удалять юниты при удалении здания
 // [+] починить скроллинг при перетаскивании (починено. вроде)
@@ -34,6 +60,7 @@ import PanelIncome from "./components/PanelIncome";
 // [+] добавлять больше лайнов автоматически (всего один последний лайн. временно)
 // [] добавлять деления таймлайна динамически
 // [+] прокручивать viewport автоматически при перетаскивании эелментов таймлайна вверх или вниз
+// [] лайн для мулов
 
 const noopFn = () => {};
 const trueFn = () => true;
@@ -42,6 +69,79 @@ const INITIAL_WORKERS = 12;
 const INITIAL_MINERALS = 50;
 
 const INCOME_SCALE_DIV = 60;
+
+const HISTORY_LIMIT = 100;
+
+function History(limit = 100) {
+	let states = [];
+	let currentIndex = -1;
+
+	function pushState(state, key = undefined) {
+		let clearedFuture = false;
+		if (currentIndex < states.length - 1) {
+			// clear future history
+			clearedFuture = true;
+			states.splice(currentIndex + 1, states.length - currentIndex - 1);
+		}
+
+		// currentIndex always equal `states.length - 1` here
+		if (key && !clearedFuture && key === states[currentIndex].key) {
+			// replace last history item if key is the same
+			states[currentIndex].data = state;
+		} else {
+			if (currentIndex >= limit) {
+				states.copyWithin(0, 1);
+				states[currentIndex] = {data: state, key};
+			} else {
+				states.push({
+					data: state,
+					key
+				});
+				currentIndex++;
+			}
+		}
+	}
+
+	function clear() { // need to add initial state after calling clear
+		states = [];
+		currentIndex = -1;
+	}
+
+	function canUndo() {
+		return currentIndex > 0;
+	}
+
+	function canRedo() {
+		return currentIndex < states.length - 1;
+	}
+
+	function undo() {
+		if (!canUndo()) {
+			// no previous history
+			return;
+		}
+		currentIndex--;
+		return states[currentIndex].data;
+	}
+
+	function redo() {
+		if (!canRedo()) {
+			// no future history
+			return;
+		}
+		currentIndex++;
+		return states[currentIndex].data;
+	}
+
+	return {
+		pushState,
+		undo,
+		redo,
+		canUndo,
+		canRedo,
+		clear,
+	}
+}
 
 function ProductionColumnsData(validateRequirement, columnRemoved, getUnitData, getTimeScale, data) {
 	let nextColumnId = 1, nextItemId = 1;
@@ -79,14 +179,6 @@ function ProductionColumnsData(validateRequirement, columnRemoved, getUnitData, 
 
 
 		function insertIncomeDelta(time, incomeDelta, itemId) {
-			/* let incomeIndex = 0;
-			while (
-				incomeIndex < incomeItems.length &&
-				incomeItems[incomeIndex].time < time
-			) {
-				incomeIndex++;
-			} */
-
 			let incomeIndex = incomeItems.findIndex(i => i.time >= time);
 			if (incomeIndex === -1) {
 				incomeIndex = incomeItems.length;
@@ -130,6 +222,16 @@ function ProductionColumnsData(validateRequirement, columnRemoved, getUnitData, 
 				// insertTimeEnd    ->   incomeItem.endTime
 				// insertTime       ->   insertTimeEnd
 				// incomeItem.time  ->   insertTime
+
+				// sIndex - index of spacing item
+				// it starts from 1:
+				// ------
+				// sIndex*2     = 2 -> 4
+				//                  -> 5
+				// sIndex*2 + 1 = 3 -> 6
+				//                  -> 7, etc.
+				// ------
+				// grows like binary tree, which guarantees it to be unique
 
 				if (incomeItem.reminder > 0) {
 					const spentReminder = Math.min(remaining, incomeItem.reminder);
@@ -410,23 +512,122 @@ function ProductionColumnsData(validateRequirement, columnRemoved, getUnitData, 
 		return column.viewItems = viewItems.concat(draggingItems);
 	}
 
+	const columnsById = new Map();
+
 	function createColumn(items = []) {
 		const [track, notify] = voidSignal();
 		const column = {
 			id: nextColumnId,
+			removed: false,
 			secondaryCol: undefined,
 			isSecondary: false,
 			items, viewItems: [], notify,
 			getItems: () => track(getViewItems(column)),
 		};
+		columnsById.set(column.id, column);
 		nextColumnId++;
 		return column;
 	}
 
-	const columns = data.map( columnItems => {
+	let columns = data.map( columnItems => {
 		const items = initColumnItems(columnItems);
 		return createColumn(items);
 	});
+
+	const history = History(HISTORY_LIMIT);
+
+	// let vv = 0;
+
+	const [canUndo, setCanUndo] = signal(false);
+	const [canRedo, setCanRedo] = signal(false);
+
+	function saveHistory(key = undefined) {
+		const data = {
+			// columnsV: 0,
+			// v: vv,
+			columns: columns.map(c => ({
+				id: c.id,
+				isSecondary: c.isSecondary,
+				secondaryColId: c.secondaryCol ? c.secondaryCol.id : undefined,
+				items: c.items.slice(0),
+			}))
+		};
+		// console.log('save', vv, JSON.stringify(columns[7].items, null, 4));
+		// vv++;
+		history.pushState(data, key);
+		setCanUndo(history.canUndo());
+		setCanRedo(false);
+	}
+
+	saveHistory();
+
+	function applyHistoryData(data) {
+		batch(() => {
+			notifyColumnsData();
+			const prevColumns = columns;
+			columns.forEach(c => c.removed = true);
+			columns = [];
+			for (const colData of data.columns) {
+				const column = columnsById.get(colData.id);
+				column.removed = false;
+				column.secondaryCol = colData.secondaryColId
+					? columnsById.get(colData.secondaryColId)
+					: undefined;
+				if (column.items.length > 0 || colData.items.length > 0) { // skip updating empty columns
+					column.items = colData.items.slice(0);
+					clearItemsDragging(column);
+					column.notify();
+				}
+				/* if (column === prevColumns[7]) {
+					console.log('load', data.v, JSON.stringify(column.items, null, 4));
+				} */
+				columns.push(column);
+			}
+			prevColumns.forEach(column => {
+				if (column.removed) {
+					columnRemoved(column);
+				}
+			});
+			notifyColumns();
+
+			/* let i = 0;
+			for (const column of columns) {
+				const colData = data.columns[i];
+				column.secondaryCol = colData.secondaryColId
+					? columnsById.get(colData.secondaryColId)
+					: undefined;
+				const itemsData = colData.items;
+				if (column.items.length > 0 || itemsData.length > 0) {
+					column.items = itemsData.slice(0);
+					clearItemsDragging(column);
+					column.notify();
+				}
+				i++;
+			} */
+		});
+	}
+
+	function undoHistory() {
+		const data = history.undo();
+		if (!data) {
+			return false;
+		}
+		applyHistoryData(data);
+		setCanUndo(history.canUndo());
+		setCanRedo(history.canRedo()); // true
+		return true;
+	}
+
+	function redoHistory() {
+		const data = history.redo();
+		if (!data) {
+			return false;
+		}
+		applyHistoryData(data);
+		setCanUndo(history.canUndo()); // true
+		setCanRedo(history.canRedo());
+		return true;
+	}
 
 	function findColumnIndex(column) {
 		const index = columns.findIndex(c => c === column);
@@ -447,14 +648,14 @@ function ProductionColumnsData(validateRequirement, columnRemoved, getUnitData, 
 		columns.splice(index, 1);
 		columnRemoved(column);
 		notifyColumns();
-		notifyColumnsData();
+		// notifyColumnsData();
 	}
 
 	function insertColumnAfter(column, afterCol) {
 		const index = findColumnIndex(afterCol);
 		columns.splice(index + 1, 0, column);
 		notifyColumns();
-		notifyColumnsData();
+		// notifyColumnsData();
 	}
 
 	/* function removeColumn(column) {
@@ -493,6 +694,7 @@ function ProductionColumnsData(validateRequirement, columnRemoved, getUnitData, 
 		nextItemId++;
 
 		notifyColumnsData();
+		// column.items = pushImmutable(column.items, item); // immutable version
 		column.items.push(item);
 		column.notify();
 		if (column.items.length === 1 && isLastColumn(column)) {
@@ -514,26 +716,33 @@ function ProductionColumnsData(validateRequirement, columnRemoved, getUnitData, 
 				insertColumnAfter(column.secondaryCol, column);
 			}
 		}
+		if (visible) {
+			saveHistory();
+		}
 	}
 
-	function deleteElement(items, fn) {
-		const index = items.findIndex(fn);
+	function deleteColumnItem(column, fn) {
+		const index = column.items.findIndex(fn);
 		if (index !== -1) {
-			const item = items[index];
-			items.splice(index, 1);
+			const item = column.items[index];
+			// column.items = column.items.toSpliced(index, 1);
+			// column.items = deleteImmutable(column.items, index); // immutable version
+			column.items.splice(index, 1);
 			return item;
 		}
 	}
 
-	function removeItem(column, viewItem) {
-		const item = deleteElement(column.items, i => i.id === viewItem.id);
+	let removeEventId = 0;
+
+	function removeItem(column, viewItem, mouseDown = false) {
+		const item = deleteColumnItem(column, i => i.id === viewItem.id);
 		if (item) {
 			// todo: delete items that used this requirement, or mark invalid
 			if (column.secondaryCol) {
 				const unitData = getUnitData(item.typeId);
 				if (unitData.category === Category.ADDON) {
-					deleteElement(
-						column.secondaryCol.items,
+					deleteColumnItem(
+						column.secondaryCol,
 						i => i.time === item.time && !i.visible
 					);
 					if (column.secondaryCol.items.length === 0) {
@@ -547,6 +756,10 @@ function ProductionColumnsData(validateRequirement, columnRemoved, getUnitData, 
 			if (column.secondaryCol) {
 				column.secondaryCol.notify();
 			}
+			if (mouseDown) {
+				removeEventId++;
+			}
+			saveHistory('removeItems:' + removeEventId);
 		}
 	}
 
@@ -687,7 +900,7 @@ function ProductionColumnsData(validateRequirement, columnRemoved, getUnitData, 
 		if (index === -1) {
 			throw new Error(`Item not found, id = '${viewItem.id}'`);
 		}
-		const dragItem = column.items[index];
+		let dragItem = column.items[index];
 		const timeScale = getTimeScale();
 		const newX = 0;
 		let newY = divideInt(y, timeScale);
@@ -697,12 +910,16 @@ function ProductionColumnsData(validateRequirement, columnRemoved, getUnitData, 
 		notifyColumnsData();
 		if (dragMode === DragMode.Multiple || dragMode === DragMode.MultipleWithSecondary) {
 			let offset = newY - prevTime;
+			let i = 0;
 			for (const item of column.items) {
 				if (item.dragging) {
 					const itemHeight = item.endTime - item.time;
-					item.time += offset;
-					item.endTime = item.time + itemHeight;
+					const newItem = Object.assign({}, item);
+					newItem.time += offset;
+					newItem.endTime = newItem.time + itemHeight;
+					column.items[i] = newItem;
 				}
+				i++;
 			}
 			column.notify();
 		} else if (dragMode === DragMode.Single || dragMode === DragMode.SingleWithSecondary) {
@@ -736,6 +953,7 @@ function ProductionColumnsData(validateRequirement, columnRemoved, getUnitData, 
 			}
 
 			const time = newY;
+			dragItem = Object.assign({}, dragItem);
 			dragItem.time = time;
 			dragItem.endTime = time + itemHeight;
 			dragItem.dragging = true;
@@ -744,7 +962,12 @@ function ProductionColumnsData(validateRequirement, columnRemoved, getUnitData, 
 			let i = index;
 			let nextIndex = i + offset;
 			let nextItem = column.items[nextIndex];
+			// let cloned = false;
 			while (nextItem && (time - nextItem.time) * offset > 0) {
+				/* if (!cloned) {
+					cloned = true;
+					column.items = column.items.slice(0); // cloning array, to need to stay immutable for history
+				} */
 				column.items[i] = nextItem;
 				i += offset;
 				nextIndex = i + offset;
@@ -760,12 +983,16 @@ function ProductionColumnsData(validateRequirement, columnRemoved, getUnitData, 
 			dragMode === DragMode.MultipleWithSecondary
 		) {
 			let offset = newY - prevTime;
+			let i = 0;
 			for (const item of column.secondaryCol.items) {
 				if (item.dragging) {
 					const itemHeight = item.endTime - item.time;
-					item.time += offset;
-					item.endTime = item.time + itemHeight;
+					const newItem = Object.assign({}, item);
+					newItem.time += offset;
+					newItem.endTime = newItem.time + itemHeight;
+					column.secondaryCol.items[i] = newItem;
 				}
+				i++;
 			}
 			column.secondaryCol.notify();
 		}
@@ -796,6 +1023,7 @@ function ProductionColumnsData(validateRequirement, columnRemoved, getUnitData, 
 			item.dragging = false;
 			column.notify();
 		}
+		saveHistory();
 	}
 
 	const columnsData = () => trackColumns(columns);
@@ -860,6 +1088,11 @@ function ProductionColumnsData(validateRequirement, columnRemoved, getUnitData, 
 		dragStartItem,
 		dragMoveItem,
 		dragFinishItem,
+
+		undoHistory,
+		redoHistory,
+		canUndo,
+		canRedo,
 	};
 }
 
@@ -963,6 +1196,9 @@ function App() {
 	let selectedColumnEl;
 
 	function updateButtons() {
+		if (!selectedColumn) {
+			return;
+		}
 		let typeId = 0;
 		buttonCategories.forEach((buttonCategory) => buttonCategory.buttons = []);
 		for (const unitData of unitsData()) {
@@ -1012,7 +1248,14 @@ function App() {
 		}
 	}
 
-	const { workersCount, columnsData, getEconomyItems, trackInvalidItems, appendItem, removeItem, dragStartItem, dragMoveItem, dragFinishItem } = ProductionColumnsData(
+	const {
+		workersCount, columnsData, getEconomyItems,
+		trackInvalidItems,
+		appendItem, removeItem,
+		dragStartItem, dragMoveItem, dragFinishItem,
+		undoHistory, redoHistory,
+		canUndo, canRedo,
+	} = ProductionColumnsData(
 		validateRequirement,
 		columnRemoved,
 		getUnitData,
@@ -1068,9 +1311,9 @@ function App() {
 
 
 
-	function handleRemoveItem(column, item) {
+	function handleRemoveItem(column, item, mouseDown) {
 		batch(() => {
-			removeItem(column, item);
+			removeItem(column, item, mouseDown);
 			if (selectedColumn && selectedColumn.id === column.id) {
 				updateButtons();
 			}
@@ -1089,11 +1332,44 @@ function App() {
 		});
 	}
 
+	function handleUndo() {
+		if (undoHistory()) {
+			updateButtons();
+		}
+	}
+	
+	function handleRedo() {
+		if (redoHistory()) {
+			updateButtons();
+		}
+	}
+
 	const panelProductionEl = document.getElementById('panel-production');
 	delegateEvent(panelProductionEl, '.production-button-add-item', 'click', (el) => el.clickAppendItem(el));
 
-	delegateEvent(panelProductionEl, '.production-item', 'contextmenu', (el, event) => el.clickRemoveItem(event));
+	panelProductionEl.addEventListener('contextmenu', function(event) {
+		event.preventDefault();
+	});
 
+	const MOUSE_BUTTON_RIGHT = 2;
+	function handleMouseRightButton(el, event, mouseDown = false) {
+		if (event.buttons === MOUSE_BUTTON_RIGHT) {
+			el.clickRemoveItem(event, mouseDown);
+		}
+	}
+	delegateEvent(panelProductionEl, '.production-item', 'mousedown', function(el, event) {
+		handleMouseRightButton(el, event, true);
+	});
+	delegateEvent(panelProductionEl, '.production-item', 'mousemove', handleMouseRightButton);
+
+	// delegateEvent(panelProductionEl, '.production-item', 'contextmenu', (el, event) => el.clickRemoveItem(event));
+
+	render(PanelMenu, document.getElementById('panel-menu'), {
+		handleUndo,
+		handleRedo,
+		canUndo,
+		canRedo,
+	});
 	render(ProductionColumns, document.getElementById('production-columns'), {
 		panelProductionEl,
 		columns: columnsData,
