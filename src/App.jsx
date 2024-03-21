@@ -327,6 +327,9 @@ function ProductionColumnsData(validateRequirement, columnRemoved, getUnitData, 
 
 		for (const column of columns) {
 			for (const item of column.items) {
+				if (item.fixed || !item.visible) {
+					continue;
+				}
 				const unitData = getUnitData(item.typeId);
 				if (unitData.mineralIncome > 0) {
 					if (unitData.lifeTime > 0) { // temporary income (MULE)
@@ -358,7 +361,7 @@ function ProductionColumnsData(validateRequirement, columnRemoved, getUnitData, 
 		for (const column of columns) {
 			let needNotifyColumn = false;
 			for (const item of column.items) {
-				if (item.fixed) {
+				if (item.fixed || !item.visible) {
 					continue;
 				}
 				const unitData = getUnitData(item.typeId);
@@ -489,6 +492,7 @@ function ProductionColumnsData(validateRequirement, columnRemoved, getUnitData, 
 					y: item.time * timeScale,
 					height: unitData.buildTime * timeScale,
 					isWide: unitData.isWide || false,
+					isLiftOff: unitData.category === Category.LIFT_OFF,
 					fixed: item.fixed,
 					invalid: item.invalid,
 					dragging: item.dragging,
@@ -561,50 +565,46 @@ function ProductionColumnsData(validateRequirement, columnRemoved, getUnitData, 
 
 	saveHistory();
 
-	function applyHistoryData(data) {
-		batch(() => {
-			notifyColumnsData();
-			const prevColumns = columns;
-			columns.forEach(c => c.removed = true);
-			columns = [];
-			for (const colData of data.columns) {
-				const column = columnsById.get(colData.id);
-				column.removed = false;
-				column.secondaryCol = colData.secondaryColId
-					? columnsById.get(colData.secondaryColId)
-					: undefined;
-				if (column.items.length > 0 || colData.items.length > 0) { // skip updating empty columns
-					column.items = colData.items.slice(0);
-					clearItemsDragging(column);
-					column.notify();
-				}
-				/* if (column === prevColumns[7]) {
-					console.log('load', data.v, JSON.stringify(column.items, null, 4));
-				} */
-				columns.push(column);
-			}
-			prevColumns.forEach(column => {
-				if (column.removed) {
-					columnRemoved(column);
-				}
-			});
-			notifyColumns();
+	function clearColumnsData(data = []) {
+		history.clear();
+		columnsById.clear();
 
-			/* let i = 0;
-			for (const column of columns) {
-				const colData = data.columns[i];
-				column.secondaryCol = colData.secondaryColId
-					? columnsById.get(colData.secondaryColId)
-					: undefined;
-				const itemsData = colData.items;
-				if (column.items.length > 0 || itemsData.length > 0) {
-					column.items = itemsData.slice(0);
-					clearItemsDragging(column);
-					column.notify();
-				}
-				i++;
-			} */
+		columns = data.map( columnItems => {
+			const items = initColumnItems(columnItems);
+			return createColumn(items);
 		});
+		saveHistory();
+		notifyColumns();
+		notifyColumnsData();
+	}
+
+	function applyHistoryData(data) {
+		notifyColumnsData();
+		const prevColumns = columns;
+		columns.forEach(c => c.removed = true);
+		columns = [];
+		for (const colData of data.columns) {
+			const column = columnsById.get(colData.id);
+			column.removed = false;
+			column.secondaryCol = colData.secondaryColId
+				? columnsById.get(colData.secondaryColId)
+				: undefined;
+			if (column.items.length > 0 || colData.items.length > 0) { // skip updating empty columns
+				column.items = colData.items.slice(0);
+				clearItemsDragging(column);
+				column.notify();
+			}
+			/* if (column === prevColumns[7]) {
+				console.log('load', data.v, JSON.stringify(column.items, null, 4));
+			} */
+			columns.push(column);
+		}
+		prevColumns.forEach(column => {
+			if (column.removed) {
+				columnRemoved(column);
+			}
+		});
+		notifyColumns();
 	}
 
 	function undoHistory() {
@@ -612,7 +612,9 @@ function ProductionColumnsData(validateRequirement, columnRemoved, getUnitData, 
 		if (!data) {
 			return false;
 		}
-		applyHistoryData(data);
+		batch(() => {
+			applyHistoryData(data);
+		});
 		setCanUndo(history.canUndo());
 		setCanRedo(history.canRedo()); // true
 		return true;
@@ -623,7 +625,9 @@ function ProductionColumnsData(validateRequirement, columnRemoved, getUnitData, 
 		if (!data) {
 			return false;
 		}
-		applyHistoryData(data);
+		batch(() => {
+			applyHistoryData(data);
+		});
 		setCanUndo(history.canUndo()); // true
 		setCanRedo(history.canRedo());
 		return true;
@@ -701,7 +705,7 @@ function ProductionColumnsData(validateRequirement, columnRemoved, getUnitData, 
 			insertColumnAfter(createColumn(), column);
 		}
 
-		if (!column.isSecondary && unitData.category === Category.ADDON) {
+		if (!column.isSecondary && unitData.isWide) {
 			let insertCol = false;
 			if (!column.secondaryCol) {
 				insertCol = true;
@@ -735,20 +739,44 @@ function ProductionColumnsData(validateRequirement, columnRemoved, getUnitData, 
 	let removeEventId = 0;
 
 	function removeItem(column, viewItem, mouseDown = false) {
-		const item = deleteColumnItem(column, i => i.id === viewItem.id);
-		if (item) {
-			// todo: delete items that used this requirement, or mark invalid
+		const index = column.items.findIndex(i => i.id === viewItem.id);
+		// const item = deleteColumnItem(column, i => i.id === viewItem.id);
+		if (index !== -1) {
+			const item = column.items[index];
+			column.items.splice(index, 1);
+			const unitData = getUnitData(item.typeId);
+			if (
+				unitData.category === Category.PRODUCTION ||
+				unitData.category === Category.RESOURCE_CENTER ||
+				unitData.category === Category.TECH_STRUCTURE
+			) {
+				column.items = [];
+			} else {
+				// delete items that has missing requirements
+				for (let i = index; i < column.items.length; i++) {
+					const itemUnitData = getUnitData(column.items[i].typeId);
+					if (!validateRequirement(itemUnitData.requirement, column.items, column.isSecondary)) {
+						column.items.splice(i, 1);
+						i--;
+					}
+				}
+			}
 			if (column.secondaryCol) {
-				const unitData = getUnitData(item.typeId);
 				if (unitData.category === Category.ADDON) {
+					/* deleteColumnItem(
+						column.secondaryCol,
+						i => i.time === item.time && !i.visible
+					); */
+					// if (column.secondaryCol.items.length === 0) {
+						removeColumn(column.secondaryCol);
+						column.secondaryCol = undefined;
+					// }
+				} else if (unitData.isWide) {
+					// delete invisible height placeholder item in second line
 					deleteColumnItem(
 						column.secondaryCol,
 						i => i.time === item.time && !i.visible
 					);
-					if (column.secondaryCol.items.length === 0) {
-						removeColumn(column.secondaryCol);
-						column.secondaryCol = undefined;
-					}
 				}
 			}
 			notifyColumnsData();
@@ -834,6 +862,7 @@ function ProductionColumnsData(validateRequirement, columnRemoved, getUnitData, 
 			}
 			column.notify();
 		} else if (unitData.category === Category.ADDON && !event.shiftKey) {
+			// todo: перетаскивание перелета (Category.LIFT_OFF) багованное - пока не предусмотрено drag режима с захватом его placeholder-а. только перетаскивание всех элеметнов колонки
 			dragMode = DragMode.SingleWithSecondary;
 			dragMinTime = 0;
 			// const primaryCol = column.isSecondary ? getPrimaryColumn(column) : column;
@@ -841,8 +870,7 @@ function ProductionColumnsData(validateRequirement, columnRemoved, getUnitData, 
 				dragMinTime = Math.max(dragMinTime, reqItem.endTime);
 			});
 			
-			// немного костыль, определеять соответствие по time. но пока так
-			dragItem = column.items.find(i => i.time === dragItem.time);
+			// dragItem = column.items.find(i => i.time === dragItem.time);
 			dragItem.dragging = true;
 			setItemsDragging(column.secondaryCol);
 
@@ -1073,6 +1101,8 @@ function ProductionColumnsData(validateRequirement, columnRemoved, getUnitData, 
 	return {
 		trackInvalidItems,
 
+		clearColumnsData,
+
 		workersCount,
 		columnsData,
 		getEconomyItems,
@@ -1103,6 +1133,11 @@ function preloadImages() {
 		image.src = './resources/' + unitData.icon;
 		images.push(image);
 	}
+	for (const unitData of UnitsData.Zerg) {
+		const image = new Image();
+		image.src = './resources/' + unitData.icon;
+		images.push(image);
+	}
 }
 
 function App() {
@@ -1110,6 +1145,20 @@ function App() {
 
 	const [race, setRace] = signal('Terran');
 	const [timeScale, setTimeScale] = signal(4);
+
+	function getRaceKey() {
+		return race(race => {
+			if (race === 'Terran') {
+				return 't';
+			}
+			if (race === 'Zerg') {
+				return 'z';
+			}
+			if (race === 'Protoss') {
+				return 'p';
+			}
+		});
+	}
 
 	const unitsData = sMemo(
 		() => UnitsData[race()]
@@ -1200,6 +1249,7 @@ function App() {
 			return;
 		}
 		let typeId = 0;
+		const raceKey = getRaceKey();
 		buttonCategories.forEach((buttonCategory) => buttonCategory.buttons = []);
 		for (const unitData of unitsData()) {
 			const hasRequirements = validateRequirement(unitData.requirement, selectedColumn.items, selectedColumn.isSecondary);
@@ -1210,7 +1260,7 @@ function App() {
 				const isDisabled = !hasRequirements;
 				const buttonCategory = buttonCategoryMap[unitData.category];
 				buttonCategories[buttonCategory].buttons.push({
-					key: typeId + ':' + isDisabled,
+					key: raceKey + typeId + ':' + isDisabled,
 					typeId,
 					name: unitData.name,
 					icon: unitData.icon,
@@ -1253,7 +1303,7 @@ function App() {
 		trackInvalidItems,
 		appendItem, removeItem,
 		dragStartItem, dragMoveItem, dragFinishItem,
-		undoHistory, redoHistory,
+		undoHistory, redoHistory, clearColumnsData,
 		canUndo, canRedo,
 	} = ProductionColumnsData(
 		validateRequirement,
@@ -1344,6 +1394,93 @@ function App() {
 		}
 	}
 
+	function selectRace(race) {
+		setSelectedColumn(undefined);
+		setRace(race);
+
+		let data;
+		if (race === 'Terran') {
+			const firstColumnData = [
+				{
+					name: 'Command center', typeId: 0,
+					time: 0, fixed: true,
+				},
+				{
+					name: 'SCV', typeId: 1,
+					time: 0,
+				},
+				{
+					name: 'SCV', typeId: 1,
+					time: 12,
+				},
+				{
+					name: 'SCV', typeId: 1,
+					time: 24,
+				},
+			];
+			data = [
+				firstColumnData,
+				...Array.from({length: 18}, () => [])
+			];
+		} else if (race === 'Zerg') {
+			const firstColumnData = [
+				{
+					name: 'Hatchery', typeId: 0,
+					time: 0, fixed: true,
+				}
+			];
+			const secondColumnData = [
+				{
+					name: 'Overlord', typeId: 3,
+					time: 0, fixed: true,
+				}
+			];
+			const thirdColumnData = [
+				{
+					name: 'Drone', typeId: 1,
+					time: 0,
+				},
+				{
+					name: 'Drone', typeId: 1,
+					time: 12,
+				},
+				{
+					name: 'Drone', typeId: 1,
+					time: 24,
+				},
+			];
+			data = [
+				firstColumnData, secondColumnData, thirdColumnData,
+				...Array.from({length: 16}, () => [])
+			];
+		} else if (race === 'Protoss') {
+			const firstColumnData = [
+				{
+					name: 'Nexus', typeId: 0,
+					time: 0, fixed: true,
+				},
+				{
+					name: 'Probe', typeId: 1,
+					time: 0,
+				},
+				{
+					name: 'Probe', typeId: 1,
+					time: 12,
+				},
+				{
+					name: 'Probe', typeId: 1,
+					time: 24,
+				},
+			];
+			data = [
+				firstColumnData,
+				...Array.from({length: 18}, () => [])
+			];
+		}
+
+		clearColumnsData(data);
+	}
+
 	const panelProductionEl = document.getElementById('panel-production');
 	delegateEvent(panelProductionEl, '.production-button-add-item', 'click', (el) => el.clickAppendItem(el));
 
@@ -1369,6 +1506,8 @@ function App() {
 		handleRedo,
 		canUndo,
 		canRedo,
+		getRace: race,
+		selectRace,
 	});
 	render(ProductionColumns, document.getElementById('production-columns'), {
 		panelProductionEl,

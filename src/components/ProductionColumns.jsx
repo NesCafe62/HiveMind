@@ -3,8 +3,6 @@ import { For } from '../pozitron-web';
 import { DelegateDraggable, handleDragScroll } from '../libs/draggable';
 import { DragMode } from '../data';
 
-// const MOUSE_BUTTON_RIGHT = 2;
-
 const SYMBOL_NDASH = decodeURIComponent('%E2%80%93'); // &ndash;
 
 function ProductionColumn({ panelProductionEl, column, trackInvalidItems, removeItem, dragStartItem, dragMoveItem, dragFinishItem, setSelectedColumn }) {
@@ -244,7 +242,11 @@ function ProductionColumn({ panelProductionEl, column, trackInvalidItems, remove
 					}
 					return (
 						<div
-							class="production-item" classList={{ 'production-item-wide': item.isWide, 'production-item-fixed': item.fixed }}
+							class="production-item" classList={{
+								'production-item-wide': item.isWide,
+								'production-item-lift': item.isLiftOff,
+								'production-item-fixed': item.fixed
+							}}
 							ref={ el => (
 								el.clickRemoveItem = clickRemoveItem,
 								el.handleDragStartItem = handleDragStartItem,

@@ -1,4 +1,3 @@
-import { h } from 'pozitron-js/render';
 import { subscribe, _getListener } from 'pozitron-js';
 import { $TRACK, unwrap } from './pozitron-store';
 
@@ -20,8 +19,105 @@ export function StaticFor(props) {
 	// return h('', null, props.each.map(renderItem));
 }
 
+function mapElement(value, renderFn, ref = noopFn) {
+	if (typeof value !== 'function') {
+		const node = renderFn(value);
+		ref(node);
+		return node;
+	}
+
+	let node, currentValue = NaN;
+	subscribe(value, (value) => {
+		if (value === currentValue) {
+			return;
+		}
+		const newNode = renderFn(currentValue = value);
+		node && node.replaceWith(newNode);
+		ref(node = newNode);
+	});
+	return node;
+}
+
+export function Dynamic(props) {
+	return mapElement(props.value, props.children[0], props.ref);
+}
+
+export function Switch(props) {
+	const cases = props.children[0];
+
+	const nodes = new Map();
+	function renderFn(value) {
+		const caseFn = cases[value];
+		if (!caseFn) {
+			return Comment();
+		}
+		let node = nodes.get(value);
+		if (!node) {
+			nodes.set(value, node = caseFn());
+		}
+		return node;
+	}
+	
+	return mapElement(props.of, renderFn, props.ref);
+
+	/* const of = props.of;
+	const cases = props.children[0];
+	const ref = props.ref || noopFn;
+
+	const nodes = new Map();
+
+	let node, value;
+	function renderFn(value) {
+		const caseFn = cases[value];
+		if (!caseFn) {
+			return Comment();
+		}
+		let node = nodes.get(value);
+		if (!node) {
+			nodes.set(value, node = caseFn());
+		}
+		ref(node);
+		return node;
+	}
+
+	if (typeof of === 'function') {
+		subscribe(of, (value) => {
+			const newNode = renderFn(value);
+			node.replaceWith(newNode);
+			node = newNode;
+		}, {defer: true});
+		value = of();
+	} else {
+		value = of;
+	}
+
+	node = renderFn(value);
+	return node; */
+}
+
 export function If(props) {
-	const condition = props.condition;
+	const child = props.children[0];
+
+	let renderThen, renderElse;
+	if (typeof child === 'function') {
+		renderThen = child;
+		renderElse = Comment;
+	} else {
+		[renderThen, renderElse] = child;
+	}
+
+	let nodeThen, nodeElse;
+	function renderFn(isConditionTrue) {
+		if (isConditionTrue) {
+			return nodeThen || (nodeThen = renderThen());
+		} else {
+			return nodeElse || (nodeElse = renderElse());
+		}
+	}
+
+	return mapElement(props.condition, renderFn, props.ref);
+
+	/* const condition = props.condition;
 	const child = props.children[0];
 	const ref = props.ref || noopFn;
 
@@ -62,7 +158,7 @@ export function If(props) {
 
 	node = renderFn(isConditionTrue);
 	ref(node);
-	return node;
+	return node; */
 
 	/* function renderFn(isConditionTrue) {
 		if (isConditionTrue) {
