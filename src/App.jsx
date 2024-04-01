@@ -1,12 +1,13 @@
 import { signal, voidSignal, untrack, sMemo, batch } from "pozitron-js";
 import { render } from "pozitron-js/render";
-import { UnitsData, ButtonCategories, Color, AND, OR, NO, EMPTY, COL_PRIMARY, COL_SECONDARY, Category, DragMode, BuildType } from "./data";
+import { UnitsData, ButtonCategories, Color, AND, OR, NO, EMPTY, COL_PRIMARY, COL_SECONDARY, Category, DragMode, BuildType, Races } from "./data";
 import { delegateEvent, divideInt } from "./libs/utils";
 import { notifiableStore } from "./pozitron-store";
 import PanelMenu from "./components/PanelMenu";
 import ProductionColumns from "./components/ProductionColumns";
 import PanelItemsPalette from "./components/PanelItemsPalette";
 import PanelIncome from "./components/PanelIncome";
+import History from "./libs/history";
 
 /* function pushImmutable(arr, item) {
 	const newArr = arr.slice(0);
@@ -72,88 +73,15 @@ const INCOME_SCALE_DIV = 60;
 
 const HISTORY_LIMIT = 100;
 
-function History(limit = 100) {
-	let states = [];
-	let currentIndex = -1;
-
-	function pushState(state, key = undefined) {
-		let clearedFuture = false;
-		if (currentIndex < states.length - 1) {
-			// clear future history
-			clearedFuture = true;
-			states.splice(currentIndex + 1, states.length - currentIndex - 1);
-		}
-
-		// currentIndex always equal `states.length - 1` here
-		if (key && !clearedFuture && key === states[currentIndex].key) {
-			// replace last history item if key is the same
-			states[currentIndex].data = state;
-		} else {
-			if (currentIndex >= limit) {
-				states.copyWithin(0, 1);
-				states[currentIndex] = {data: state, key};
-			} else {
-				states.push({
-					data: state,
-					key
-				});
-				currentIndex++;
-			}
-		}
-	}
-
-	function clear() { // need to add initial state after calling clear
-		states = [];
-		currentIndex = -1;
-	}
-
-	function canUndo() {
-		return currentIndex > 0;
-	}
-
-	function canRedo() {
-		return currentIndex < states.length - 1;
-	}
-
-	function undo() {
-		if (!canUndo()) {
-			// no previous history
-			return;
-		}
-		currentIndex--;
-		return states[currentIndex].data;
-	}
-
-	function redo() {
-		if (!canRedo()) {
-			// no future history
-			return;
-		}
-		currentIndex++;
-		return states[currentIndex].data;
-	}
-
-	return {
-		pushState,
-		undo,
-		redo,
-		canUndo,
-		canRedo,
-		clear,
-	}
-}
-
 function ProductionColumnsData(validateRequirement, columnRemoved, getUnitData, getTimeScale, data) {
 	let nextColumnId = 1, nextItemId = 1;
 
 	const [trackColumns, notifyColumns] = voidSignal();
 
 	const [trackColumnsData, notifyColumnsData] = voidSignal();
-	const [trackInvalidItems, notifyInvalidItems] = voidSignal();
+	// const [trackInvalidItems, notifyInvalidItems] = voidSignal();
 
 	const [workersCount, setWorkersCount] = signal(0);
-
-	let incomeItems;
 
 	function getEconomyItems() {
 		trackColumnsData();
@@ -165,17 +93,30 @@ function ProductionColumnsData(validateRequirement, columnRemoved, getUnitData, 
 		const workerIncome = 60;
 
 		let workers = INITIAL_WORKERS;
-		incomeItems = [{
-			time: 0, endTime: 0,
-			incomeDelta: INITIAL_WORKERS * workerIncome,
-			incomePerMin: 0,
-			width: 0, height: 0,
-			color: undefined, id: undefined,
-			isSpent: false, reminder: INITIAL_MINERALS * INCOME_SCALE_DIV,
-			isPrevSpent: false,
-			spHigher: false, spNextHigher: false, spLower: true, spNextLower: false,
-			key: '', sIndex: 1, itemsId: ['I'], invalid: false,
-		}];
+		const incomeItems = [
+			{
+				time: 0, endTime: 0,
+				incomeDelta: 0,
+				incomePerMin: 0,
+				width: 0, height: 0,
+				color: undefined, id: undefined,
+				isSpent: false, reminder: INITIAL_MINERALS * INCOME_SCALE_DIV,
+				isPrevSpent: false,
+				spHigher: false, spNextHigher: false, spLower: true, spNextLower: false,
+				key: '', sIndex: 1, itemsId: ['S'], invalid: false,
+			},
+			{
+				time: 0, endTime: 0,
+				incomeDelta: INITIAL_WORKERS * workerIncome,
+				incomePerMin: 0,
+				width: 0, height: 0,
+				color: undefined, id: undefined,
+				isSpent: false, reminder: 0,
+				isPrevSpent: false,
+				spHigher: false, spNextHigher: false, spLower: true, spNextLower: false,
+				key: '', sIndex: 1, itemsId: ['I'], invalid: false,
+			}
+		];
 
 
 		function insertIncomeDelta(time, incomeDelta, itemId) {
@@ -374,15 +315,15 @@ function ProductionColumnsData(validateRequirement, columnRemoved, getUnitData, 
 					if (item.invalid !== invalid) {
 						item.invalid = invalid;
 						needNotifyColumn = true;
-						/* if (invalid) {
+						if (invalid) {
 							console.log(`Not enough minerals! ${-divideInt(remaining, INCOME_SCALE_DIV)}`);
-						} */
+						}
 					}
 				}
 			}
 			if (needNotifyColumn) {
 				// update viewItems for changed `.invalid` values
-				column.notify();
+				column.notifyInvalid();
 			}
 		}
 
@@ -417,12 +358,14 @@ function ProductionColumnsData(validateRequirement, columnRemoved, getUnitData, 
 		}
 		lastItem.isLast = true;
 
+		incomeItems.shift(); // remove first income item
+
 		incomeItems[0].spHigher = true;
 
 		// console.log(incomeItems);
 
 		setWorkersCount(workers);
-		notifyInvalidItems();
+		// notifyInvalidItems();
 
 		return incomeItems;
 	}
@@ -458,18 +401,26 @@ function ProductionColumnsData(validateRequirement, columnRemoved, getUnitData, 
 		const viewItems = [];
 		const draggingItems = [];
 		let lastTime = 0;
+		let prevId = 'I';
 		let i = 0;
 		for (const item of column.items) {
 			const unitData = getUnitData(item.typeId);
 			let addSpacing = item.time > lastTime;
-			if (addSpacing) {
+			const connectedColor = (unitData.category === Category.MORPH_UNIT)
+				? Color[Category.MORPH_UNIT] : undefined;
+			if (addSpacing || connectedColor) {
 				viewItems.push({
-					id: 's:' + lastTime + ':' + item.time,
+					id: connectedColor
+						? 'c:' + prevId + ':' + item.id
+						: 's:' + lastTime + ':' + item.time,
 					spacing: true,
+					connectedColor,
 					height: (item.time - lastTime) * timeScale,
+					bottom: connectedColor ? lastTime * timeScale : undefined,
 				});
 			}
 			lastTime = item.time + (item.fixed ? 0 : unitData.buildTime);
+			prevId = item.id;
 			if (!item.visible) {
 				viewItems.push({
 					id: item.id,
@@ -492,6 +443,7 @@ function ProductionColumnsData(validateRequirement, columnRemoved, getUnitData, 
 					y: item.time * timeScale,
 					height: unitData.buildTime * timeScale,
 					isWide: unitData.isWide || false,
+					count: unitData.count || undefined,
 					isLiftOff: unitData.category === Category.LIFT_OFF,
 					fixed: item.fixed,
 					invalid: item.invalid,
@@ -520,12 +472,15 @@ function ProductionColumnsData(validateRequirement, columnRemoved, getUnitData, 
 
 	function createColumn(items = []) {
 		const [track, notify] = voidSignal();
+		const [trackInvalid, notifyInvalid] = voidSignal();
 		const column = {
 			id: nextColumnId,
 			removed: false,
 			secondaryCol: undefined,
 			isSecondary: false,
 			items, viewItems: [], notify,
+			notifyInvalid,
+			trackInvalidItems: () => trackInvalid(column.viewItems),
 			getItems: () => track(getViewItems(column)),
 		};
 		columnsById.set(column.id, column);
@@ -727,23 +682,34 @@ function ProductionColumnsData(validateRequirement, columnRemoved, getUnitData, 
 
 	function deleteColumnItem(column, fn) {
 		const index = column.items.findIndex(fn);
-		if (index !== -1) {
-			const item = column.items[index];
-			// column.items = column.items.toSpliced(index, 1);
-			// column.items = deleteImmutable(column.items, index); // immutable version
-			column.items.splice(index, 1);
-			return item;
+		if (index === -1) {
+			return [undefined, index];
 		}
+		const item = column.items[index];
+		// column.items = column.items.toSpliced(index, 1);
+		// column.items = deleteImmutable(column.items, index); // immutable version
+		column.items.splice(index, 1);
+		return [item, index];
 	}
 
 	let removeEventId = 0;
 
+	function removeMissingRequirementItems(column, startIndex = 0) {
+		for (let i = startIndex; i < column.items.length; i++) {
+			const unitData = getUnitData(column.items[i].typeId);
+			if (!validateRequirement(unitData.requirement, column.items, column.isSecondary)) {
+				column.items.splice(i, 1);
+				i--;
+			}
+		}
+	}
+
 	function removeItem(column, viewItem, mouseDown = false) {
-		const index = column.items.findIndex(i => i.id === viewItem.id);
-		// const item = deleteColumnItem(column, i => i.id === viewItem.id);
-		if (index !== -1) {
-			const item = column.items[index];
-			column.items.splice(index, 1);
+		// const index = column.items.findIndex(i => i.id === viewItem.id);
+		const [item, index] = deleteColumnItem(column, i => i.id === viewItem.id);
+		if (item) { // index !== -1) {
+			// const item = column.items[index];
+			// column.items.splice(index, 1);
 			const unitData = getUnitData(item.typeId);
 			if (
 				unitData.category === Category.PRODUCTION ||
@@ -751,33 +717,39 @@ function ProductionColumnsData(validateRequirement, columnRemoved, getUnitData, 
 				unitData.category === Category.TECH_STRUCTURE
 			) {
 				column.items = [];
+				if (column.secondaryCol) {
+					removeColumn(column.secondaryCol);
+					column.secondaryCol = undefined;
+				}
 			} else {
 				// delete items that has missing requirements
-				for (let i = index; i < column.items.length; i++) {
-					const itemUnitData = getUnitData(column.items[i].typeId);
-					if (!validateRequirement(itemUnitData.requirement, column.items, column.isSecondary)) {
-						column.items.splice(i, 1);
-						i--;
-					}
-				}
-			}
-			if (column.secondaryCol) {
-				if (unitData.category === Category.ADDON) {
-					/* deleteColumnItem(
-						column.secondaryCol,
-						i => i.time === item.time && !i.visible
-					); */
-					// if (column.secondaryCol.items.length === 0) {
-						removeColumn(column.secondaryCol);
-						column.secondaryCol = undefined;
-					// }
-				} else if (unitData.isWide) {
+				removeMissingRequirementItems(column, index);
+				// if (column.secondaryCol) {
+					// if (unitData.category === Category.ADDON) {
+						/* deleteColumnItem(
+							column.secondaryCol,
+							i => i.time === item.time && !i.visible
+						); */
+						// if (column.secondaryCol.items.length === 0) {
+					//		removeColumn(column.secondaryCol);
+					//		column.secondaryCol = undefined;
+						// }
+					// } else
+				if (unitData.isWide) {
 					// delete invisible height placeholder item in second line
-					deleteColumnItem(
+					const [itemSecondary, indexSecondary] = deleteColumnItem(
 						column.secondaryCol,
 						i => i.time === item.time && !i.visible
 					);
+					if (itemSecondary) {
+						removeMissingRequirementItems(column.secondaryCol, indexSecondary);
+					}
+					if (column.secondaryCol.items.length === 0) {
+						removeColumn(column.secondaryCol);
+						column.secondaryCol = undefined;
+					}
 				}
+				// }
 			}
 			notifyColumnsData();
 			column.notify();
@@ -831,14 +803,24 @@ function ProductionColumnsData(validateRequirement, columnRemoved, getUnitData, 
 		}
 	}
 
+	/* function isMorphCategory(category) {
+		return (
+			category === Category.MORPH_UNIT ||
+			category === Category.MORPH_STRUCTURE
+		);
+	} */
+
 	let dragMode, dragMinTime;
 
 	function dragStartItem(column, viewItem, event) {
-		let dragItem = column.items.find(i => i.id === viewItem.id);
-		if (!dragItem) {
+		const index = column.items.findIndex(i => i.id === viewItem.id);
+		if (index === -1) {
 			throw new Error(`Item not found, id = '${viewItem.id}'`);
 		}
+		const dragItem = column.items[index];
 		const unitData = getUnitData(viewItem.typeId);
+		const nextItem = column.items[index + 1];
+		// const nextUnitData = nextItem ? getUnitData(nextItem.typeId) : undefined;
 		if (dragItem.fixed) {
 			dragMode = DragMode.Column;
 			dragMinTime = 0;
@@ -861,23 +843,7 @@ function ProductionColumnsData(validateRequirement, columnRemoved, getUnitData, 
 				column.secondaryCol.notify();
 			}
 			column.notify();
-		} else if (unitData.category === Category.ADDON && !event.shiftKey) {
-			// todo: перетаскивание перелета (Category.LIFT_OFF) багованное - пока не предусмотрено drag режима с захватом его placeholder-а. только перетаскивание всех элеметнов колонки
-			dragMode = DragMode.SingleWithSecondary;
-			dragMinTime = 0;
-			// const primaryCol = column.isSecondary ? getPrimaryColumn(column) : column;
-			validateRequirement(unitData.requirement, column.items, false /* isSecondary */, (reqItem) => {
-				dragMinTime = Math.max(dragMinTime, reqItem.endTime);
-			});
-			
-			// dragItem = column.items.find(i => i.time === dragItem.time);
-			dragItem.dragging = true;
-			setItemsDragging(column.secondaryCol);
-
-			notifyColumnsData();
-			column.notify();
-			column.secondaryCol.notify();
-		} else if (event.shiftKey) {
+		} else if (event.shiftKey || (nextItem && getUnitData(nextItem.typeId).category === Category.MORPH_UNIT)) {
 			// drag item with all items above
 			dragMode = DragMode.Multiple;
 			dragMinTime = 0;
@@ -896,7 +862,7 @@ function ProductionColumnsData(validateRequirement, columnRemoved, getUnitData, 
 					)
 				) { */
 				if (item.time >= dragItem.time) {
-					if (!column.isSecondary && unitData.category === Category.ADDON) {
+					if (!column.isSecondary && unitData.isWide) { // category === Category.ADDON) {
 						dragMode = DragMode.MultipleWithSecondary;
 					}
 					heightOffset = Math.max(heightOffset, dragItem.time - item.time);
@@ -913,6 +879,23 @@ function ProductionColumnsData(validateRequirement, columnRemoved, getUnitData, 
 				column.secondaryCol.notify();
 			}
 			column.notify();
+		} else if (unitData.isWide) { // category === Category.ADDON && !event.shiftKey) {
+			// todo: перелет (Category.LIFT_OFF) - пока не предусмотрено drag режима с захватом его placeholder-а. только перетаскивание всех элеметнов колонки
+			dragMode = DragMode.SingleWithSecondary;
+			dragMinTime = 0;
+			// const primaryCol = column.isSecondary ? getPrimaryColumn(column) : column;
+			validateRequirement(unitData.requirement, column.items, false /* isSecondary */, (reqItem) => {
+				console.log(reqItem);
+				dragMinTime = Math.max(dragMinTime, reqItem.endTime);
+			});
+			
+			// dragItem = column.items.find(i => i.time === dragItem.time);
+			dragItem.dragging = true;
+			setItemsDragging(column.secondaryCol);
+
+			notifyColumnsData();
+			column.notify();
+			column.secondaryCol.notify();
 		} else {
 			dragMode = DragMode.Single;
 			dragMinTime = 0;
@@ -1099,7 +1082,7 @@ function ProductionColumnsData(validateRequirement, columnRemoved, getUnitData, 
 	// };
 
 	return {
-		trackInvalidItems,
+		// trackInvalidItems,
 
 		clearColumnsData,
 
@@ -1128,15 +1111,12 @@ function ProductionColumnsData(validateRequirement, columnRemoved, getUnitData, 
 
 const images = [];
 function preloadImages() {
-	for (const unitData of UnitsData.Terran) {
-		const image = new Image();
-		image.src = './resources/' + unitData.icon;
-		images.push(image);
-	}
-	for (const unitData of UnitsData.Zerg) {
-		const image = new Image();
-		image.src = './resources/' + unitData.icon;
-		images.push(image);
+	for (const race of Races) {
+		for (const unitData of UnitsData[race]) {
+			const image = new Image();
+			image.src = './resources/' + unitData.icon;
+			images.push(image);
+		}
 	}
 }
 
@@ -1300,7 +1280,7 @@ function App() {
 
 	const {
 		workersCount, columnsData, getEconomyItems,
-		trackInvalidItems,
+		// trackInvalidItems,
 		appendItem, removeItem,
 		dragStartItem, dragMoveItem, dragFinishItem,
 		undoHistory, redoHistory, clearColumnsData,
@@ -1512,7 +1492,7 @@ function App() {
 	render(ProductionColumns, document.getElementById('production-columns'), {
 		panelProductionEl,
 		columns: columnsData,
-		trackInvalidItems,
+		// trackInvalidItems,
 		removeItem: handleRemoveItem,
 		dragStartItem,
 		dragMoveItem,

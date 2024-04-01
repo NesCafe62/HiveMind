@@ -93,15 +93,15 @@ function PanelMenu({ handleUndo, handleRedo, canUndo, canRedo, getRace, selectRa
 				class="menu-button" title="Загрузить"
 			><i class="mdi mdi-folder" /></button>
 			<button
-				class="menu-button" title="Отменить (Ctrl + Z)"
+				class="menu-button" title="Отменить действие (Ctrl + Z)"
 				disabled={() => canUndo() ? undefined : ''}
 				onClick={handleClickUndo}
-			><i class="mdi mdi-undo" /></button>
+			><i class="mdi mdi-arrow-u-left-top" /></button>
 			<button
-				class="menu-button" title="Повторить (Ctrl + Y)"
+				class="menu-button" title="Повторить действие (Ctrl + Y)"
 				disabled={() => canRedo() ? undefined : ''}
 				onClick={handleClickRedo}
-			><i class="mdi mdi-redo" /></button>
+			><i class="mdi mdi-arrow-u-right-top" /></button>
 			<button
 				class="menu-button menu-button-race" classList={{ open: isOpen }}
 				onClick={toggleIsOpen}

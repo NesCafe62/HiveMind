@@ -7,15 +7,19 @@ function Comment() {
 
 const emptyItem = {};
 const noopFn = () => {};
-const defaultKeyFn = (item) => item;
+const identityFn = (el) => el;
+
+function createFragment(items, renderFn = identityFn) {
+	const el = document.createDocumentFragment();
+	for (const item of items) {
+		el.appendChild(renderFn(item));
+	}
+	return el;
+}
 
 export function StaticFor(props) {
 	const renderItem = props.children[0];
-	const el = document.createDocumentFragment();
-	for (const item of props.each) {
-		el.appendChild(renderItem(item));
-	}
-	return el;
+	return createFragment(props.each, renderItem);
 	// return h('', null, props.each.map(renderItem));
 }
 
@@ -102,8 +106,15 @@ export function If(props) {
 	if (typeof child === 'function') {
 		renderThen = child;
 		renderElse = Comment;
-	} else {
+	} else if (Array.isArray(child)) {
 		[renderThen, renderElse] = child;
+	} else {
+		// condition must be static for non-function children elements. todo: check and throw error
+		const children = props.children;
+		renderThen = children.length > 1
+			? () => createFragment(children)
+			: () => child;
+		renderElse = Comment;
 	}
 
 	let nodeThen, nodeElse;
@@ -201,7 +212,7 @@ export function Index(props) {
 		: () => each;
 	const keyFn = typeof key === 'string'
 		? (item) => item[key]
-		: (key || defaultKeyFn);
+		: (key || identityFn);
 	const ref = props.ref || noopFn;
 	const renderFn = props.children[0];
 	const items = getter(); // todo: untrack(getter)
@@ -335,7 +346,7 @@ export function For(props) {
 		: () => each;
 	const keyFn = typeof key === 'string'
 		? (item) => item[key]
-		: (key || defaultKeyFn);
+		: (key || identityFn);
 	const ref = props.ref || noopFn;
 	const renderFn = props.children[0];
 	const items = getter(); // todo: untrack(getter)

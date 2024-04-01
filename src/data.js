@@ -10,14 +10,16 @@ export const Color = [
 	'#2a45b1', // '#5174ff', // economy (gas) - blue
 
 	'#2a45b1', // '#5174ff', // resource center - dark blue
-	'#9097a0', // supply - ...
+	'#00ac8c', // supply - teal (#9097a0 - grey)
 	'#a349a4', // production - pink
 	'#ffd700', // tech structure - yellow
 	'#ffd700', // addon - yellow
 	'#5174ff', // lift off - yellow
-	'#00ac8c', // #b90d28 // defence - cyan
+	'#b90d28', // #b90d28 // defence - red // (cyan  #00ac8c)
 
 	'#ff7f27', // upgrade - orange
+	'#8f40c6', // morph structure - violet
+	'#8f40c6', // morph unit - violet
 ];
 
 export const DragMode = {
@@ -42,6 +44,8 @@ export const Category = {
 	DEFENCE: 10,
 	
 	UPGRADE: 11,
+	MORPH_STRUCTURE: 12,
+	MORPH_UNIT: 13,
 };
 
 export const BuildType = {
@@ -57,11 +61,11 @@ export const ButtonCategories = [
 	},
 	{
 		title: 'Юниты',
-		categories: [Category.UNIT],
+		categories: [Category.UNIT, Category.MORPH_UNIT],
 	},
 	{
 		title: 'Строения',
-		categories: [Category.PRODUCTION, Category.TECH_STRUCTURE, Category.SUPPLY, Category.DEFENCE],
+		categories: [Category.PRODUCTION, Category.TECH_STRUCTURE, Category.SUPPLY, Category.DEFENCE, Category.MORPH_STRUCTURE],
 	},
 	{
 		title: 'Улучшения',
@@ -168,12 +172,12 @@ export const UnitsData = {
 		},
 		{
 			name: 'Overseer', icon: 'unit-zerg-overseer.png',
-			category: Category.DEFENCE, requirement: [AND, 'Overlord', [NO, 'Overseer'], [NO, 'Droperlord']],
+			category: Category.MORPH_UNIT, requirement: [AND, 'Overlord', [NO, 'Overseer'], [NO, 'Droperlord']],
 			buildTime: 12, mineralCost: 50, gasCost: 50,
 		},
 		{
 			name: 'Droperlord', icon: 'unit-zerg-overlordtransport.png',
-			category: Category.DEFENCE, requirement: [AND, 'Overlord', [NO, 'Overseer'], [NO, 'Droperlord']],
+			category: Category.MORPH_UNIT, requirement: [AND, 'Overlord', [NO, 'Overseer'], [NO, 'Droperlord']],
 			buildTime: 12, mineralCost: 25, gasCost: 25,
 		},
 		{
@@ -184,12 +188,12 @@ export const UnitsData = {
 		},
 		{
 			name: 'Lair', icon: 'building-zerg-lair.png',
-			category: Category.TECH_STRUCTURE, requirement: [AND, 'Hatchery', [NO, 'Lair'], COL_PRIMARY],
+			category: Category.MORPH_STRUCTURE, requirement: [AND, 'Hatchery', [NO, 'Lair'], COL_PRIMARY],
 			buildTime: 57, mineralCost: 150, gasCost: 100,
 		},
 		{
 			name: 'Hive', icon: 'building-zerg-hive.png',
-			category: Category.TECH_STRUCTURE, requirement: [AND, 'Lair', [NO, 'Hive'], COL_PRIMARY],
+			category: Category.MORPH_STRUCTURE, requirement: [AND, 'Lair', [NO, 'Hive'], COL_PRIMARY],
 			buildTime: 71, mineralCost: 200, gasCost: 150,
 		},
 
@@ -226,7 +230,7 @@ export const UnitsData = {
 		},
 		{
 			name: 'Greater spire', icon: 'building-zerg-greaterspire.png',
-			category: Category.TECH_STRUCTURE, requirement: [AND, 'Spire', [NO, 'Greater spire']],
+			category: Category.MORPH_STRUCTURE, requirement: [AND, 'Spire', [NO, 'Greater spire']],
 			buildTime: 71, mineralCost: 100, gasCost: 150,
 		},
 		{
@@ -280,14 +284,14 @@ export const UnitsData = {
 
 		// units
 		{
-			name: 'Zergling', icon: 'unit-zerg-zergling.png',
+			name: 'Zergling', icon: 'unit-zerg-zergling.png', isWide: true,
 			category: Category.UNIT, requirement: [OR, EMPTY, [AND, 'Zergling', [NO, 'Baneling']]],
 			buildTime: 17, mineralCost: 50, supply: 1, count: 2,
 		},
 		{
 			name: 'Baneling', icon: 'unit-zerg-baneling.png',
-			category: Category.UNIT, requirement: [AND, 'Zergling', [NO, 'Baneling']],
-			buildTime: 14, mineralCost: 50, gasCost: 50, count: 2, /* and -2 zergling for units count */
+			category: Category.MORPH_UNIT, requirement: [AND, 'Zergling', [NO, 'Baneling']],
+			buildTime: 14, mineralCost: 25, gasCost: 25, /* -1 zergling for units count */
 		},
 		{
 			name: 'Roach', icon: 'unit-zerg-roach.png',
@@ -296,7 +300,7 @@ export const UnitsData = {
 		},
 		{
 			name: 'Ravager', icon: 'unit-zerg-ravager.png',
-			category: Category.UNIT, requirement: [AND, 'Roach', [NO, 'Ravager']],
+			category: Category.MORPH_UNIT, requirement: [AND, 'Roach', [NO, 'Ravager']],
 			buildTime: 12, mineralCost: 25, gasCost: 75, supply: 1, /* 2 + 1 = 3 in total */
 		},
 		{
@@ -306,7 +310,7 @@ export const UnitsData = {
 		},
 		{
 			name: 'Lurker', icon: 'unit-zerg-lurker.png',
-			category: Category.UNIT, requirement: [AND, 'Hydralisk', [NO, 'Lurker']],
+			category: Category.MORPH_UNIT, requirement: [AND, 'Hydralisk', [NO, 'Lurker']],
 			buildTime: 18, mineralCost: 50, gasCost: 100, supply: 1, /* 2 + 1 = 3 in total */
 		},
 		{
@@ -321,7 +325,7 @@ export const UnitsData = {
 		},
 		{
 			name: 'Broodlord', icon: 'unit-zerg-mantalisk.png',
-			category: Category.UNIT, requirement: [AND, 'Corruptor', [NO, 'Broodlord']],
+			category: Category.MORPH_UNIT, requirement: [AND, 'Corruptor', [NO, 'Broodlord']],
 			buildTime: 24, mineralCost: 150, gasCost: 150, supply: 2, /* 2 + 2 = 4 in total */
 		},
 		{
@@ -519,7 +523,7 @@ export const UnitsData = {
 		},
 		{
 			name: 'MULE', icon: 'unit-terran-mule.png',
-			category: Category.ECONOMY, requirement: 'Orbital station', visible: [AND, 'Command center', [NO, 'Planetary fortress']],
+			category: Category.ECONOMY, requirement: [AND, 'Orbital station', COL_SECONDARY], visible: [AND, 'Command center', [NO, 'Planetary fortress']],
 			buildTime: 0, mineralCost: 0,
 			mineralIncome: 225, lifeTime: 60, buildTime: 60, /* buildTime - time to next mule */
 			/* actually lifetime is 64 but we tweak it so we have round income numbers */
@@ -528,7 +532,7 @@ export const UnitsData = {
 		// extra-supply
 		// scan
 		{
-			name: 'Orbital station', icon: 'building-terran-orbitalstation.png',
+			name: 'Orbital station', icon: 'building-terran-orbitalstation.png', isWide: true,
 			category: Category.ECONOMY, requirement: [AND, 'Command center', [NO, 'Orbital station'], [NO, 'Planetary fortress']],
 			buildTime: 25, mineralCost: 150,
 		},

@@ -1,11 +1,14 @@
 import { subscribe, batch } from 'pozitron-js';
-import { For } from '../pozitron-web';
+import { For, If } from '../pozitron-web';
 import { DelegateDraggable, handleDragScroll } from '../libs/draggable';
 import { DragMode } from '../data';
 
 const SYMBOL_NDASH = decodeURIComponent('%E2%80%93'); // &ndash;
 
-function ProductionColumn({ panelProductionEl, column, trackInvalidItems, removeItem, dragStartItem, dragMoveItem, dragFinishItem, setSelectedColumn }) {
+function ProductionColumn({
+	panelProductionEl, column, removeItem, // trackInvalidItems
+	dragStartItem, dragMoveItem, dragFinishItem, setSelectedColumn
+}) {
 	let columnEl, itemsEl;
 
 	/* const primaryCol = column.isSecondary
@@ -16,11 +19,26 @@ function ProductionColumn({ panelProductionEl, column, trackInvalidItems, remove
 		setSelectedColumn(column, columnEl);
 	}
 
+	function updateDragConnected() {
+		let i = 0;
+		for (const itemEl of itemsEl) {
+			const item = column.viewItems[i];
+			if (item.connectedColor) {
+				itemEl.style.setProperty('--item-height', item.height + 'px');
+				itemEl.style.setProperty('--item-bottom', item.bottom + 'px');
+			}
+			i++;
+		}
+	}
+
 	function updateDrag(maxY) {
 		let i = 0;
 		for (const itemEl of itemsEl) {
 			const item = column.viewItems[i];
-			if (item.dragging) {
+			if (item.connectedColor) {
+				itemEl.style.setProperty('--item-height', item.height + 'px');
+				itemEl.style.setProperty('--item-bottom', item.bottom + 'px');
+			} else if (item.dragging) {
 				itemEl.style.top = (maxY - item.height - item.y) + 'px';
 				itemEl.style.left = '0px';
 			}
@@ -99,6 +117,7 @@ function ProductionColumn({ panelProductionEl, column, trackInvalidItems, remove
 						el.style.top = newY + 'px';
 						el.style.left = newX + 'px';
 					});
+					updateDragConnected();
 				} else if (dragMode === DragMode.SingleWithSecondary) {
 					batch(() => {
 						el.handleDragMoveItem(column, dragItem, x, yFromBottom);
@@ -177,13 +196,13 @@ function ProductionColumn({ panelProductionEl, column, trackInvalidItems, remove
 		return ('0' + min).slice(-2) + ':' + ('0' + sec).slice(-2);
 	}
 
-	subscribe(trackInvalidItems, () => {
+	subscribe(column.trackInvalidItems, (viewItems) => {
 		if (!itemsEl) {
 			return;
 		}
 		let i = 0;
 		for (const itemEl of itemsEl) {
-			const item = column.viewItems[i];
+			const item = viewItems[i];
 			if (item.invalid) {
 				itemEl.classList.add('invalid');
 			} else {
@@ -198,7 +217,10 @@ function ProductionColumn({ panelProductionEl, column, trackInvalidItems, remove
 		let i = 0;
 		for (const itemEl of itemsEl) {
 			const item = column.viewItems[i];
-			if (!item.spacing) {
+			if (item.connectedColor) {
+				itemEl.style.setProperty('--item-height', item.height + 'px');
+				itemEl.style.setProperty('--item-bottom', item.bottom + 'px');
+			} else if (!item.spacing && !item.hidden) {
 				const timeText = displayTime(item.time);
 				const titleText = `${timeText}  ${SYMBOL_NDASH}  ${item.name}`;
 				itemEl.setAttribute('title', titleText);
@@ -223,7 +245,18 @@ function ProductionColumn({ panelProductionEl, column, trackInvalidItems, remove
 				if (item.draggingPlaceholder || item.hidden) {
 					return <div class="production-item-placeholder" style={{ 'min-height': item.height + 'px' }} />;
 				} else if (item.spacing) {
-					return <div class="production-item-space" style={{ 'min-height': item.height + 'px' }} />;
+					if (item.connectedColor) {
+						return <div
+							class="production-item-space production-item-connected-line"
+							style={{
+								// '--item-height': item.height + 'px',
+								// '--item-bottom': item.bottom + 'px',
+								'--cl-connected': item.connectedColor
+							}}
+						/>;
+					} else {
+						return <div class="production-item-space" style={{ 'min-height': item.height + 'px' }} />;
+					}
 				} else {
 					function clickRemoveItem(event, mouseDown) {
 						// event.preventDefault();
@@ -255,6 +288,12 @@ function ProductionColumn({ panelProductionEl, column, trackInvalidItems, remove
 							)}
 							style={{ 'min-height': item.fixed ? '' : (item.height + 'px'), '--cl-bg': item.color }}
 						>
+							<If condition={item.count === 2}>
+								<div
+									class="production-icon production-icon-second"
+									style={{ 'background-image': `url('./resources/${item.icon}')`}}
+								/>
+							</If>
 							<div class="production-icon" style={{ 'background-image': `url('./resources/${item.icon}')` }} />
 							<i title="Недостаточно ресурсов" class="mdi mdi-alert-rhombus-outline" />
 						</div>
@@ -266,7 +305,13 @@ function ProductionColumn({ panelProductionEl, column, trackInvalidItems, remove
 	);
 }
 
-function ProductionColumns({ panelProductionEl, columns, trackInvalidItems, removeItem, dragStartItem, dragMoveItem, dragFinishItem, setSelectedColumn }) {
+// <i class="mdi mdi-close-thick" />
+// <i class="mdi mdi-numeric-2" />
+
+function ProductionColumns({
+	panelProductionEl, columns, removeItem, // trackInvalidItems
+	dragStartItem, dragMoveItem, dragFinishItem, setSelectedColumn
+}) {
 	let lastScrollTop;
 
 	function setup() {
@@ -284,7 +329,7 @@ function ProductionColumns({ panelProductionEl, columns, trackInvalidItems, remo
 			<ProductionColumn
 				panelProductionEl={panelProductionEl}
 				column={column}
-				trackInvalidItems={trackInvalidItems}
+				// trackInvalidItems={trackInvalidItems}
 				removeItem={removeItem} dragStartItem={dragStartItem} dragMoveItem={dragMoveItem} dragFinishItem={dragFinishItem}
 				setSelectedColumn={setSelectedColumn}
 			/>
